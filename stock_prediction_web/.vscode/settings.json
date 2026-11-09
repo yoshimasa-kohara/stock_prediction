@@ -1,0 +1,16 @@
+{
+    // 実行・デバッグに使う Python を、このプロジェクトの仮想環境(.venv)にする
+    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+    // VSCode のターミナルを開いたときに、.venv を自動で有効にする
+    "python.terminal.activateEnvironment": true,
+    // テスト(pytest)を VSCode のテスト画面から実行できるようにする
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    // 画面(frontend)の ESLint は、frontend フォルダの設定を使う
+    "eslint.workingDirectories": [
+        "frontend"
+    ]
+}

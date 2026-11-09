@@ -1,0 +1,7 @@
+# 使用するライブラリの一覧(Python 3.15 系)
+# バッチと同じライブラリ(バッチの core と const.py を読み込むため)
+-r ../stock_prediction_batch/requirements.txt
+# API と Web サーバー。2026-10-27 に、Python 3.15 の Windows 用の配布物があることを確認
+# (fastapi・uvicorn・starlette・pydantic は Python だけで書かれている。pydantic-core は cp315-win_amd64 がある)
+fastapi==0.162.0
+uvicorn==0.54.0

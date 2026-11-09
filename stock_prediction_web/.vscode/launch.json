@@ -1,0 +1,58 @@
+{
+    // 株価予測システムの画面(stock_prediction_web)を VSCode から実行・デバッグするための設定
+    // 前提: VSCode で 【プログラムへのパス】\stock_prediction\stock_prediction_web フォルダを開いている
+    // Python のインタープリターは stock_prediction_web\.venv\Scripts\python.exe(.vscode\settings.json で指定)
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // API の Web サーバー(ポート 8080)。ソースを保存すると自動で読み直す(開発用)
+            // frontend\dist があれば、http://localhost:8080/ で本番と同じ形の画面も見られる
+            "name": "Web: API サーバー(開発。自動で読み直す)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "api",
+            "args": ["--reload"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            // 画面の開発サーバー(Vite。http://localhost:5173/)。/api/ へのリクエストは API サーバーに中継する
+            // 先に「Web: API サーバー」を起動しておく(下の「Web: 開発(API + 画面)」なら両方を起動する)
+            "name": "Web: 画面の開発サーバー(Vite)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run dev",
+            "cwd": "${workspaceFolder}/frontend"
+        },
+        {
+            // API のテスト(pytest)。カバレッジ(api/ で 90% 以上)も出す
+            "name": "Web: API のテスト(pytest)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["--cov"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            // 画面のテスト(Vitest)。カバレッジも出す
+            "name": "Web: 画面のテスト(Vitest)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run coverage",
+            "cwd": "${workspaceFolder}/frontend"
+        }
+    ],
+    "compounds": [
+        {
+            // 開発するときは、これで API サーバーと画面の開発サーバーを一緒に起動し、http://localhost:5173/ を開く
+            "name": "Web: 開発(API + 画面)",
+            "configurations": ["Web: API サーバー(開発。自動で読み直す)", "Web: 画面の開発サーバー(Vite)"],
+            "stopAll": true
+        }
+    ]
+}

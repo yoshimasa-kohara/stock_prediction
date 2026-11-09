@@ -1,0 +1,59 @@
+# pytest、Ruff、mypy の設定(バッチの pyproject.toml と同じ考え方)
+
+[project]
+name = "stock_prediction_web"
+version = "0.1.0"
+description = "Stock Prediction Web(株価予測システムの画面)"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.coverage.run]
+source = ["api"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+# 目標は api/ で 90% 以上(バッチと同じ)
+fail_under = 90
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+# 画面(React)のフォルダは対象外
+extend-exclude = ["frontend"]
+
+[tool.ruff.lint]
+# E/W: 書き方、F: 誤り、I: import の順番、UP: 新しい書き方、B: よくある不具合、SIM: 簡単にできる書き方
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+# 日本語のコメントに含まれる全角の記号を、紛らわしい文字として扱わない
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.isort]
+# api は web のコード。const・common・core・tools は、.pth で読み込むバッチのコード
+known-first-party = ["api", "const", "common", "core", "tools"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI の引数の書き方(Depends、Query)を、引数の初期値の誤りとして扱わない
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+# テストのコードも型ヒントを検査する
+files = ["api", "tests"]
+# バッチのコード(const・common・core・tools)の場所。実行するときは .pth で読み込むが、mypy にはここで教える
+mypy_path = "../stock_prediction_batch"
+
+[[tool.mypy.overrides]]
+# バッチのコードは、バッチ側で検査する(ここでは型の情報として使うだけ)
+module = ["const", "common", "common.*", "core", "core.*", "tools", "tools.*"]
+follow_imports = "silent"
+
+[[tool.mypy.overrides]]
+# 型の情報を持たないライブラリ
+module = ["jpholiday", "jpholiday.*", "lightgbm", "lightgbm.*"]
+ignore_missing_imports = true

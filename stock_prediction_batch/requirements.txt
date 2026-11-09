@@ -1,0 +1,12 @@
+# 使用するライブラリの一覧(Python 3.15 系。Windows 用の配布物(cp315)があることを 2026-10-18 に確認)
+requests==2.34.2
+psycopg[binary]==3.3.6
+pandas==3.0.6
+numpy==2.5.4
+lightgbm==4.7.0
+jpholiday==1.0.3
+python-dotenv==1.2.3
+# Windows には時刻帯のデータがないため、日本時間(Asia/Tokyo)の計算に必要
+tzdata==2026.5
+# 日経平均の取得(Yahoo Finance。非公式で個人利用のみ。表示だけに使う。core/index_collect_core.py)
+yfinance==1.8.0

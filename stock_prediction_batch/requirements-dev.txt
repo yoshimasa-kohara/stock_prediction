@@ -1,0 +1,8 @@
+# 開発用のライブラリの一覧
+-r requirements.txt
+pytest==9.1.1
+pytest-cov==7.1.0
+ruff==0.17.1
+mypy==2.4.0
+types-requests==2.33.0.20261006
+pandas-stubs==3.0.5.260914

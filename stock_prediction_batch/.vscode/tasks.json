@@ -1,0 +1,16 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            // プログラムが終わったことを音で知らせる(launch.json の postDebugTask から呼ぶ)
+            "label": "終了の音",
+            "type": "shell",
+            "command": "[console]::beep(1000, 500)",
+            "options": {
+                "shell": { "executable": "powershell.exe", "args": ["-NoProfile", "-Command"] }
+            },
+            "presentation": { "reveal": "never", "close": true },
+            "problemMatcher": []
+        }
+    ]
+}

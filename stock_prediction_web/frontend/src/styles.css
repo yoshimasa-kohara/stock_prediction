@@ -1,0 +1,168 @@
+/* 画面全体の見た目。画面見本の CSS をもとにしている。
+   スマホの幅(700px)は CSS の @media にしか書けないので、ここに書く(api/web_const.py には置かない) */
+
+/* ---- 画面見本と同じ部分 ---- */
+*{box-sizing:border-box;}
+body{font-family:Meiryo,"Yu Gothic","Noto Sans CJK JP",sans-serif;margin:0;color:#222;background:#f3f5f8;font-size:14px;}
+a{color:#0055cc;text-decoration:none;} a:hover{text-decoration:underline;}
+header{background:#2f3e5c;color:#fff;display:flex;align-items:center;gap:18px;padding:0 16px;height:48px;position:sticky;top:0;z-index:10;}
+header .logo{font-weight:bold;font-size:16px;white-space:nowrap;}
+header nav{display:flex;gap:2px;flex:1;}
+header nav a{color:#dbe3f0;padding:14px 10px;font-size:13px;white-space:nowrap;}
+header nav a.cur{color:#fff;background:#44557a;font-weight:bold;}
+header .search{display:flex;align-items:center;}
+header .search input{width:190px;padding:5px 8px;border:none;border-radius:4px;font-size:13px;}
+header .menu{display:none;font-size:22px;cursor:pointer;}
+.banner{background:#fff4ce;border-bottom:1px solid #e6c95a;color:#7a5a00;padding:8px 16px;font-size:13px;}
+/* 中身は画面の幅いっぱいに出す(最大の幅は決めない) */
+main{padding:16px;}
+h1{font-size:20px;margin:4px 0 12px;}
+h2{font-size:16px;margin:22px 0 8px;padding-left:8px;border-left:4px solid #2f3e5c;}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;}
+.card{background:#fff;border:1px solid #d6dbe3;border-radius:6px;padding:12px 14px;}
+.card .lbl{font-size:12px;color:#666;} .card .val{font-size:22px;font-weight:bold;margin-top:4px;} .card .sub{font-size:12px;color:#555;margin-top:4px;}
+.panel{background:#fff;border:1px solid #d6dbe3;border-radius:6px;padding:12px 14px;margin-bottom:14px;}
+.panel h2{margin-top:0;}
+.warn{background:#fff8e6;border:1px solid #f0c36d;color:#7a4a00;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:13px;}
+.ok{color:#1d7a3a;font-weight:bold;} .ng{color:#c00000;font-weight:bold;} .run{color:#b35900;font-weight:bold;}
+.cond{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;background:#fff;border:1px solid #d6dbe3;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:13px;}
+.cond input.date,.form input.date{width:140px;padding-right:28px;background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><rect x='1.5' y='3' width='13' height='11.5' rx='1.5' fill='none' stroke='%23556' stroke-width='1.3'/><line x1='1.5' y1='6.5' x2='14.5' y2='6.5' stroke='%23556' stroke-width='1.3'/><line x1='5' y1='1' x2='5' y2='4.5' stroke='%23556' stroke-width='1.3'/><line x1='11' y1='1' x2='11' y2='4.5' stroke='%23556' stroke-width='1.3'/></svg>") no-repeat right 7px center;}
+.cal{position:absolute;z-index:5;background:#fff;border:1px solid #889;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.18);padding:10px;font-size:13px;width:252px;}
+.cal .hd{display:flex;justify-content:space-between;align-items:center;font-weight:bold;margin-bottom:6px;}
+.cal table{border-collapse:collapse;width:100%;} .cal td,.cal th{border:none;text-align:center;padding:4px 0;width:36px;background:none!important;}
+.cal th{color:#666;font-weight:normal;} .cal td.off{color:#bbb;} .cal td.sel span{background:#2f3e5c;color:#fff;border-radius:50%;display:inline-block;width:26px;line-height:26px;}
+.cal td.sun,.cal th.sun{color:#c00000;} .cal td.sat,.cal th.sat{color:#0055cc;} .cal .ft{font-size:11px;color:#666;margin-top:6px;} .cond input,.cond select{padding:5px 6px;border:1px solid #aab;border-radius:4px;font-size:13px;font-family:inherit;}
+.btn{display:inline-block;padding:6px 14px;border-radius:4px;border:1px solid #2f3e5c;background:#2f3e5c;color:#fff;font-size:13px;cursor:pointer;white-space:nowrap;}
+.btn.sub{background:#fff;color:#2f3e5c;} .btn.sm{padding:2px 8px;font-size:12px;}
+.info{font-size:12px;color:#555;margin:0 0 8px;line-height:1.6;}
+.mstate{font-size:13px;margin:0 0 8px;line-height:1.6;}
+/* 「相場」のブロック(トップ・買い候補) */
+.panel.market{margin-top:14px;}
+.tabs{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap;} .tabs span{padding:6px 14px;border:1px solid #aab;border-radius:16px;font-size:13px;background:#fff;}
+.tabs span.cur{background:#2f3e5c;color:#fff;border-color:#2f3e5c;}
+.wrap{overflow-x:auto;background:#fff;}
+table{border-collapse:separate;border-spacing:0;font-size:13px;}
+th,td{border-right:1px solid #bbb;border-bottom:1px solid #bbb;padding:4px 6px;white-space:nowrap;}
+thead tr:first-child th{border-top:1px solid #bbb;} th:first-child,td:first-child{border-left:1px solid #bbb;}
+th{background:#dce6f1;font-weight:bold;} th.main{background:#d9ead3;} th.act{background:#fff2cc;}
+td.n{text-align:right;} td.c{text-align:center;} td.b{font-weight:bold;}
+tbody tr:nth-child(even) td{background:#f6f6f6;}
+.up{color:#c00000;font-weight:bold;} .dn{color:#0055cc;font-weight:bold;} .eq{color:#666;font-weight:bold;}
+.r{color:#c00000;} .bl{color:#0055cc;} .o{color:#b35900;}
+.jr{color:#c00000;font-weight:bold;} .jo{color:#b35900;font-weight:bold;}
+tfoot td{background:#fff8dc;font-weight:bold;}
+.fix{position:sticky;left:0;z-index:1;background:#fff;} th.fix{background:#dce6f1;} tfoot td.fix{background:#fff8dc;}
+tbody tr:nth-child(even) td.fix{background:#f6f6f6;}
+/* 2列を固定する表(精度の比較の比較表)。2列目は1列目の幅の分だけ右にずらす */
+.fix1{min-width:6.5em;max-width:6.5em;} .fix2{left:6.5em;}
+tr.lot td,tr.lot td.fix{background:#f7f9fc;font-size:12px;} .tog{color:#557;font-size:11px;margin-right:4px;}
+td.dash{text-align:center;color:#888;}
+tr.hl td{background:#fde2e2 !important;}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:bold;}
+.b-ok{background:#dff3e4;color:#1d7a3a;} .b-ng{background:#fde2e2;color:#c00000;} .b-run{background:#fff1d6;color:#b35900;} .b-empty{background:#eceff3;color:#555;}
+.form{display:grid;grid-template-columns:110px 1fr;gap:8px 10px;align-items:center;font-size:13px;}
+.form input,.form textarea{padding:6px 8px;border:1px solid #aab;border-radius:4px;font-size:13px;font-family:inherit;width:100%;}
+.dialog{background:#fff;border:1px solid #889;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.18);padding:16px;max-width:440px;}
+.dialog h3{margin:0 0 12px;font-size:15px;}
+.dialog .foot{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;}
+.err{color:#c00000;font-size:12px;}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px;} .two>*{min-width:0;} .accs{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;} .accs>*{min-width:0;max-width:100%;}
+.three{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px;align-items:start;}
+.chart{width:100%;height:auto;display:block;}
+.legend{font-size:12px;display:flex;gap:14px;flex-wrap:wrap;margin:4px 0;} .legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:4px;}
+@media (max-width:700px){
+ .three{grid-template-columns:1fr;}
+ header{gap:10px;}
+ header nav,header .search{display:none;}
+ header .menu{display:block;margin-left:auto;}
+ main{padding:10px;}
+ .two{grid-template-columns:1fr;}
+ .cards{grid-template-columns:1fr 1fr;}
+ .card .val{font-size:18px;}
+ .form{grid-template-columns:1fr;}
+}
+
+/* ---- 画面にするときに足した部分(順番1(共通の土台)) ---- */
+header a.logo{color:#fff;text-decoration:none;}
+/* 目次などで見出しに移ったとき、上のメニュー(高さ 48px)の下に見出しが出るように、上に余白をとる */
+h1[id],h2[id]{scroll-margin-top:60px;}
+header button.menu{background:none;border:none;color:#fff;padding:4px 8px;}
+.errbox{background:#fde2e2;border:1px solid #c00000;color:#c00000;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:13px;font-weight:bold;}
+.loading{color:#666;}
+.condinfo{margin-left:auto;font-size:12px;color:#555;}
+.dateinput{position:relative;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;}
+.dateinput .calbtn{border:1px solid #aab;border-radius:4px;background:#fff;padding:3px 6px;cursor:pointer;font-size:13px;line-height:1.2;}
+.dateinput .cal{top:calc(100% + 4px);left:0;width:auto;}
+.dateinput input.date{background-image:none;padding-right:6px;}
+input[aria-invalid="true"]{border-color:#c00000 !important;}
+/* ---- 画面にするときに足した部分(全画面の製造) ---- */
+header .search{position:relative;}
+.suggest{position:absolute;right:0;top:34px;width:300px;max-width:90vw;background:#fff;border:1px solid #889;border-radius:6px;box-shadow:0 4px 18px rgba(0,0,0,.18);z-index:20;overflow:hidden;}
+.suggest button{display:block;width:100%;text-align:left;border:none;background:#fff;padding:7px 10px;font-size:13px;cursor:pointer;color:#222;font-family:inherit;}
+.suggest button:hover,.suggest button:focus{background:#eef2fa;}
+.suggest .none{padding:7px 10px;font-size:13px;color:#888;}
+.sub{font-size:11px;color:#777;}
+.h1sub{font-size:13px;font-weight:normal;color:#555;}
+.h2sub{font-size:12px;font-weight:normal;margin-left:8px;}
+.more{margin:8px 0 0;font-size:13px;}
+.toc{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:13px;margin:8px 0 12px;}
+.tabs button{padding:6px 14px;border:1px solid #aab;border-radius:16px;font-size:13px;background:#fff;cursor:pointer;font-family:inherit;color:#222;}
+.tabs button.cur{background:#2f3e5c;color:#fff;border-color:#2f3e5c;}
+.cond .tabs{margin:0;}
+.cond.flat{border:none;padding:0;margin-bottom:4px;}
+button.btn{font-family:inherit;}
+.btn:disabled{opacity:.45;cursor:default;}
+.okbox{background:#dff3e4;border:1px solid #1d7a3a;color:#1d7a3a;border-radius:6px;padding:8px 14px;margin-bottom:14px;font-size:13px;}
+.sortable{padding:0;} .sortbtn{background:none;border:none;font:inherit;font-weight:bold;padding:4px 6px;cursor:pointer;width:100%;color:#222;white-space:nowrap;}
+.linkbtn{background:none;border:none;padding:0;font:inherit;cursor:pointer;text-align:left;white-space:normal;}
+td.errcell{white-space:normal;min-width:220px;max-width:420px;}
+.tog{background:none;border:none;cursor:pointer;padding:0 4px 0 0;color:#557;font-size:11px;}
+.overlay{position:fixed;inset:0;background:rgba(20,30,50,.35);display:flex;align-items:flex-start;justify-content:center;padding:40px 12px;z-index:50;overflow-y:auto;}
+.overlay .dialog{width:100%;}
+.form.wide{grid-template-columns:150px 1fr 150px 1fr;}
+.form .inline,.inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.form .fixed{background:#eef0f4;border-radius:4px;padding:6px 8px;}
+.form .partial{font-size:12px;color:#7a4a00;background:#fff8e6;border-radius:4px;padding:6px 8px;}
+.choices{border:1px solid #889;border-radius:4px;font-size:12px;background:#fff;}
+.choices-head{padding:4px 8px;background:#eef2fa;}
+.choices button{display:block;width:100%;text-align:left;border:none;border-top:1px solid #dde;background:#fff;padding:5px 8px;cursor:pointer;font:inherit;}
+.choices button:hover{background:#f3f6fb;}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.chips select{padding:3px 6px;border:1px solid #aab;border-radius:4px;font-size:12px;font-family:inherit;}
+.chipx{background:none;border:none;cursor:pointer;padding:0 0 0 2px;font-size:12px;color:#555;}
+.check{display:inline-flex;align-items:center;gap:3px;margin-right:6px;font-size:13px;white-space:nowrap;}
+.chartbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px;} .chartbar .tabs{margin:0;} .chartbar .checks{margin-left:auto;}
+.chartbox{position:relative;}
+.chart{width:100%;height:var(--chart-h,440px);}
+.volume-title{position:absolute;z-index:2;left:40px;bottom:96px;font-size:11px;color:#555;pointer-events:none;}
+.chart-tip{position:absolute;top:8px;z-index:3;background:rgba(255,255,255,.95);border:1px solid #889;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.15);padding:6px 10px;font-size:12px;line-height:1.6;pointer-events:none;max-width:360px;}
+.linechart{width:100%;min-height:280px;}
+.warnline{display:block;}
+@media (max-width:700px){
+ .form.wide{grid-template-columns:1fr;}
+ .chart{height:360px;}
+ .pconly{display:none !important;}
+ .chartbar .checks{margin-left:0;}
+ .suggest{right:auto;left:0;width:100%;}
+}
+
+/* カレンダー(react-day-picker)の色を画面見本に合わせる */
+.cal .rdp-root{--rdp-accent-color:#2f3e5c;--rdp-accent-background-color:#dce6f1;--rdp-day-height:32px;--rdp-day-width:34px;--rdp-day_button-height:30px;--rdp-day_button-width:30px;font-size:13px;}
+.cal table th,.cal table td{border:none !important;background:none !important;padding:0;}
+.cal .rdp-weekday:first-child{color:#c00000;} .cal .rdp-weekday:last-child{color:#0055cc;}
+.cal td.rdp-disabled,.cal td.rdp-disabled.sun,.cal td.rdp-disabled.sat{color:#bbb;opacity:1;}
+.cal td.rdp-selected .rdp-day_button{background:#2f3e5c;color:#fff;border:none;font-size:13px;font-weight:bold;}
+@media (max-width:700px){
+ header.open{flex-wrap:wrap;height:auto;}
+ header.open nav{display:flex;flex-direction:column;order:3;width:100%;flex-basis:100%;padding-bottom:8px;}
+ header.open nav a{padding:10px 8px;}
+ header.open .search{display:flex;order:4;width:100%;padding-bottom:10px;}
+ header.open .search input{width:100%;}
+ header .logo{line-height:48px;}
+}
+/* 銘柄詳細の最新の予測(1行の表)。マウスを置くと市場比などを出すセル */
+td.tip{cursor:help;}
+.heightsel{display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-left:12px;}
+/* 精度の比較: コピーできなかったときの Markdown の枠 */
+.mdcopy{width:100%;font-family:Consolas,monospace;font-size:12px;}
+.panel h3{font-size:14px;margin:4px 0 6px;}

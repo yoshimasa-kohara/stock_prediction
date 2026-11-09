@@ -1,0 +1,10 @@
+# 開発用のライブラリの一覧(バッチの requirements-dev.txt と同じ版にそろえる)
+-r requirements.txt
+pytest==9.1.1
+pytest-cov==7.1.0
+ruff==0.17.1
+mypy==2.4.0
+types-requests==2.33.0.20261006
+pandas-stubs==3.0.5.260914
+# API のテストで使う(FastAPI の TestClient が使う。starlette 1.x は httpx ではなく httpx2 を使う)
+httpx2==2.16.0

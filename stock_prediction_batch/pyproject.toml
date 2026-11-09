@@ -1,0 +1,45 @@
+# pytest、Ruff、mypy の設定
+
+[project]
+name = "stock_prediction_batch"
+version = "0.1.0"
+description = "Stock Prediction Batch(株価予測システムのバッチ)"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.coverage.run]
+source = ["common", "core"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+# 目標は common/ と core/ で 90% 以上
+fail_under = 90
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+# E/W: 書き方、F: 誤り、I: import の順番、UP: 新しい書き方、B: よくある不具合、SIM: 簡単にできる書き方
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+# 日本語のコメントに含まれる全角の記号を、紛らわしい文字として扱わない
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["const", "common", "core", "tools"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+# テストのコードも型ヒントを検査する
+files = ["*.py", "common", "core", "tools", "tests"]
+
+[[tool.mypy.overrides]]
+# 型の情報を持たないライブラリ
+module = ["jpholiday", "jpholiday.*", "lightgbm", "lightgbm.*", "yfinance", "yfinance.*"]
+ignore_missing_imports = true

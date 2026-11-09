@@ -1,0 +1,34 @@
+# バッチの学習済みモデル、ログ、Python の仮想環境
+# models配下のファイルを無視（.gitkeepは除く）
+stock_prediction_batch/models/*
+!stock_prediction_batch/models/.gitkeep
+
+# logs配下のファイルを無視（.gitkeepは除く）
+stock_prediction_batch/logs/*
+!stock_prediction_batch/logs/.gitkeep
+
+# 秘密情報(API キー、メール、DB の接続先)を書く設定ファイル(見本の .env.example は登録する)
+.env
+
+# 仮想環境を無視
+stock_prediction_batch/.venv/
+stock_prediction_web/.venv/
+
+# 画面の API のログ(.gitkeep は除く)
+stock_prediction_web/logs/*
+!stock_prediction_web/logs/.gitkeep
+
+# 画面(stock_prediction_web\frontend)の、npm install で入るパッケージ、ビルドした静的ファイル、テストのカバレッジ
+# (ソースは登録する。node_modules は npm ci で、dist は npm run build で作り直せる)
+stock_prediction_web/frontend/node_modules/
+stock_prediction_web/frontend/dist/
+stock_prediction_web/frontend/coverage/
+
+# Python とテストの道具が作るファイル
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/

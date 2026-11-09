@@ -1,0 +1,265 @@
+{
+    // 株価予測システム(stock_prediction_batch)を VSCode から実行・デバッグするための設定
+    // 前提: VSCode で stock_prediction_batch フォルダを開いている
+    // Python のインタープリターは stock_prediction_batch\.venv\Scripts\python.exe を選んでおく
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // 日次バッチ(収集 → 予測 → 検証 → 通知)を、日付を指定して実行する。通知メールが送られる
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            // daily_batch.py を直接実行するので、PCはシャットダウンしない(シャットダウンするのは daily_batch.bat だけ)
+            "name": "日次バッチ: 日付を指定",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/daily_batch.py",
+            "args": ["--date", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 週次バッチ(学習 → バックアップ → クリーニング)を、日付を指定して実行する
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            // 注意: NAS のバックアップが作られる・古い世代が消える
+            // weekly_batch.py を直接実行するので、PCはシャットダウンしない(シャットダウンするのは weekly_batch.bat だけ)
+            "name": "週次バッチ: 日付を指定",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/weekly_batch.py",
+            "args": ["--date", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 期間を指定して、全ての処理を日付順にやり直す(PCの故障などのとき。バッチ設計書 7.11)
+            // ※実行する前に、args の YYYY-MM-DD を3つとも実際の日付に書き換える(このままでは入力チェックで止まる)
+            // 平日: 収集 → 予測 → 検証 → 通知、土曜: 学習 → バックアップ → クリーニング、日曜: 何もしない
+            // 毎日の通知メールは送らず、内容は logs\全処理_通知_<--from>_<--to>.txt に出す。失敗・警告のメールは管理者に送る
+            // --predict-from は --from 〜 --to の間の日。それより前の日は収集だけで、最初のモデルは --predict-from 以降で最初の土曜に作る
+            // 収集を取り直さない場合は、range_date_full_process.py の process_weekday の run_collect(...) の行をコメントアウトする(終わったら必ず戻す)
+            // 途中で失敗したら、ログに出る日付を --from と --predict-from にして実行し直す
+            "name": "全処理: 期間を指定して全てやり直す",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/range_date_full_process.py",
+            "args": ["--from", "YYYY-MM-DD", "--to", "YYYY-MM-DD", "--predict-from", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 最新化の全処理(手順5)。収集・バックアップ・クリーニングも行う
+            // --predict-from は --from と同じ日
+            "name": "全処理(最新化 2026-10-31〜2026-11-05)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/range_date_full_process.py",
+            "args": ["--from", "2026-10-31", "--to", "2026-11-05", "--predict-from", "2026-10-31"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 指定日と、直近31日(COLLECT_BACKFILL_DAYS)で株価を取得していない営業日を収集する
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            "name": "収集: 日付を指定",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/collect.py",
+            "args": ["--date", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 学習だけを単独で実行する。models に新しいモデルができる
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            "name": "学習: 日付を指定",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train.py",
+            "args": ["--date", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 予測だけを単独で実行する
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            "name": "予測: 日付を指定",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/predict.py",
+            "args": ["--date", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 検証だけを単独で実行する
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            "name": "検証: 日付を指定",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/verify.py",
+            "args": ["--date", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 通知だけを単独で実行する
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            // 注意: 実行すると本物のメールが送られる
+            "name": "通知: 日付を指定",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/notify.py",
+            "args": ["--date", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // バックアップだけを単独で実行する
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            // 注意: NAS のバックアップが作られる。古い世代は、この後のクリーニングで消える
+            "name": "バックアップ: 日付を指定",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/backup.py",
+            "args": ["--date", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 1年分のやり直しの前に、DB のバックアップを取る(日付は 2026-11-05 に固定)
+            // 注意: NAS のバックアップが作られる。古い世代は、この後のクリーニングで消える
+            "name": "バックアップ(1年分のやり直し前)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/backup.py",
+            "args": ["--date", "2026-11-05"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // クリーニングだけを単独で実行する
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            // 注意: NAS のバックアップの古い世代が消える。DB の古い行、古いモデル、古いログ・通知のファイルも消える
+            // 同じ日付のバックアップが成功していないと、何も削除せずに失敗する
+            "name": "クリーニング: 日付を指定",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/cleanup.py",
+            "args": ["--date", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // トレンドラインの抜けの備考が、買い候補に付く割合を数える(接触の幅 2%、抜けの幅 3%。設計メモ No.173)。DB は読み取り専用。
+            // 結果は logs\trend_notes_YYYYMMDD_HHMM.csv
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            "name": "備考の割合: トレンドラインの抜け",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "tools.count_trend_notes",
+            "args": ["--from", "YYYY-MM-DD", "--to", "YYYY-MM-DD"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 接触の幅と抜けの幅を変えて、備考が付く割合を比べる(全ての組み合わせを数える。設計メモ No.173 (7))
+            // ※実行する前に、args の YYYY-MM-DD を実際の日付に書き換える(このままでは入力チェックで止まる)
+            "name": "備考の割合: トレンドラインの抜け・幅の比較",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "tools.count_trend_notes",
+            "args": ["--from", "YYYY-MM-DD", "--to", "YYYY-MM-DD", "--touch", "0.015,0.02,0.025", "--break", "0.02,0.03,0.04,0.05"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 買い候補と実際の株価の HTML を DB から作る(画面フォーマット。設計メモ No.157)。DB は読み取り専用
+            "name": "画面のHTML: 買い候補と実際の株価(2026-01〜03)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "tools.make_candidates_html",
+            "args": ["--from", "2026-01-01", "--to", "2026-03-31"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 買い候補(業種分散)と実際の株価の HTML を DB から作る(設計メモ No.202)。DB は読み取り専用。ファイル名の末尾は _業種分散
+            "name": "画面のHTML: 買い候補(業種分散)と実際の株価(2026-01〜03)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "tools.make_candidates_html",
+            "args": ["--from", "2026-01-01", "--to", "2026-03-31", "--kind", "sector"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            // 1+2 の評価(2026-11-05)。L(本番と同じ)と比べる: U ボリンジャーバンド25日、O トレンドラインからの位置、T 終値の回帰直線、M クロスの特徴量
+            // 学習は本番と同じ直近5年。DB は読み取り専用。見込みの実行時間は約25時間以上
+            "name": "評価: 1+2(L・U・O・T・M、4つの予測日数)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "tools.evaluate_model",
+            "args": ["--from-month", "2025-07", "--to-month", "2026-06", "--variants", "L,U,O,T,M", "--horizons", "5,10,20,60", "--train-years", "5"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONUTF8": "1" },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "postDebugTask": "終了の音"
+        },
+        {
+            "name": "Python デバッガー: 現在のファイル",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "postDebugTask": "終了の音"
+        }
+    ]
+}
