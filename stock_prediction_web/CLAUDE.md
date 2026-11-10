@@ -10,6 +10,9 @@
   - `api\errors.py` : エラーは HTTP の状態コードと `{"detail": "..."}` で返す
   - `api\logger.py` : ログ(`logs\web_YYYYMMDD.log`、30日分)。**API の関数には必ず `@log_api` を付ける**(`@router.get(...)` の下)
 - `frontend\` : 画面(React + TypeScript、Vite)。`src\pages\` 画面、`src\components\` 部品、`src\lib\format.ts` 書式
+- 買い候補の画面は、予測日の期間(開始日・終了日)で `/api/candidates/range` を呼び、予測日ごとに表示する(新しい日が上)。
+  期間の初期値は、予測がある日を新しい順に `CANDIDATES_DEFAULT_DAYS` 日分(`src\lib\candidateRange.ts`)。1回に表示できるのは `CANDIDATES_RANGE_MAX_MONTHS` か月まで。
+  日経平均のブロック(`src\components\LatestMarketBlock.tsx`)は、期間やタブに関係なく最新の日のものを出す
 - `tests\` : API のテスト(pytest)。画面のテストは `frontend\src` の `*.test.ts(x)`(Vitest)
 
 ## バッチのコードの読み込み
@@ -17,7 +20,8 @@
 - `.venv\Lib\site-packages\stock_prediction_batch.pth` で、バッチのフォルダを読み込む。
   `const`、`common`、`core`、`tools` はバッチのもの。**web 側にこの名前のフォルダやファイルを作らない**(`tests` には `__init__.py` を置かない)
 - DB の接続はバッチの `common.db.connect`(同じ `.env`)。画面が書き込むのは holding(保有銘柄)だけ
-- 備考(流動性注意、クロス、トレンドラインの抜けなど)はバッチの core の関数で計算し、メールと同じ結果にする
+- 備考(流動性注意、クロス、トレンドラインの抜けなど)はバッチの core の関数で計算し、メールと同じ結果にする(色もメールと同じ)
+- 保有銘柄の合計(評価額・損益)は、メールと同じ `core.notify_core.holding_totals` で求める
 
 ## 書き方の決まり
 

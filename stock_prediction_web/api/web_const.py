@@ -1,6 +1,6 @@
 """株価予測システムの画面(stock_prediction_web)の設定値。
 
-画面の数値・文字列の設定値は、このファイルにまとめる(5章 No.15)。
+画面の数値・文字列の設定値は、このファイルにまとめる。
 画面(React)には数値を直接書かず、起動したときに /api/settings で受け取る。
 バッチの設定値(予測日数、閾値など)は、バッチの const.py をそのまま読む。
 名前は const.py にしない(バッチの const と名前がぶつかるため)。
@@ -48,9 +48,14 @@ MARKET_CAP_UNIT_YEN: Final[int] = 1_000_000
 
 # トップに出す買い候補の銘柄数
 TOP_CANDIDATE_COUNT: Final[int] = 5
-# 買い候補と実際の株価: 期間の初期値(最新の予測日の何か月前から)と、1回に表示できる最大の月数
-RESULTS_DEFAULT_MONTHS: Final[int] = 1
+# 買い候補と実際の株価: 期間の初期値と、1回に表示できる最大の月数。
+# 終了日 = 最新の株価の日の何営業日前か、開始日 = 終了日の何営業日前か(営業日は株価がある日で数える)
+RESULTS_DEFAULT_END_OFFSET_DAYS: Final[int] = 10
+RESULTS_DEFAULT_SPAN_DAYS: Final[int] = 10
 RESULTS_MAX_MONTHS: Final[int] = 3
+# 買い候補: 期間の初期値(予測がある日を新しい順に数えた日数。終了日を含む)と、1回に表示できる最大の月数
+CANDIDATES_DEFAULT_DAYS: Final[int] = 5
+CANDIDATES_RANGE_MAX_MONTHS: Final[int] = 1
 # 銘柄詳細: チャートの期間の初期値(1M・3M・6M・1Y・ALL のどれか)
 CHART_DEFAULT_PERIOD: Final[str] = "6M"
 # 的中率: 推移のグラフの期間の初期値(直近の月数)

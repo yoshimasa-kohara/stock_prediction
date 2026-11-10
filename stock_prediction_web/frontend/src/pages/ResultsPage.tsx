@@ -3,7 +3,7 @@
 import { type ReactNode, useState } from "react";
 import { useSearchParams } from "react-router";
 
-import type { ResultDay, ResultsResponse } from "../api/types";
+import type { PredictionDates, ResultDay, ResultsResponse } from "../api/types";
 import { useApi } from "../api/useApi";
 import DateInput from "../components/DateInput";
 import ErrorMessage from "../components/ErrorMessage";
@@ -228,6 +228,8 @@ export default function ResultsPage() {
   const [params, setParams] = useSearchParams();
   const kind = parseKind(params.get("kind"));
   const query = { from: params.get("from") ?? undefined, to: params.get("to") ?? undefined };
+  // カレンダーで選べる日 = 予測がある日。読めないとき(エラー)は全ての日を選べる
+  const dates = useApi<PredictionDates>("/api/prediction-dates");
   const res = useApi<ResultsResponse>("/api/candidates/results", { ...query, ...kindParam(kind) });
   const [form, setForm] = useState<{ from: string; to: string } | null>(null);
   const current = form ?? { from: query.from ?? res.data?.date_from ?? "", to: query.to ?? res.data?.date_to ?? "" };
@@ -243,8 +245,19 @@ export default function ResultsPage() {
       <h1 id="top">買い候補と実際の株価</h1>
       <div className="cond">
         期間
-        <DateInput label="期間(開始)" value={current.from} onChange={(v) => setForm({ ...current, from: v })} />〜
-        <DateInput label="期間(終了)" value={current.to} onChange={(v) => setForm({ ...current, to: v })} />
+        <DateInput
+          label="期間(開始)"
+          value={current.from}
+          onChange={(v) => setForm({ ...current, from: v })}
+          enabledDates={dates.data?.dates}
+        />
+        〜
+        <DateInput
+          label="期間(終了)"
+          value={current.to}
+          onChange={(v) => setForm({ ...current, to: v })}
+          enabledDates={dates.data?.dates}
+        />
         <button
           type="button"
           className="btn"

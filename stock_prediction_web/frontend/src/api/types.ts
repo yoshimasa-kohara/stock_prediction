@@ -5,8 +5,12 @@ export interface WebSettings {
   status_refresh_sec: number;
   stock_search_limit: number;
   top_candidate_count: number;
-  results_default_months: number;
+  results_default_end_offset_days: number;
+  results_default_span_days: number;
   results_max_months: number;
+  /** 買い候補: 期間の初期値(予測がある日を新しい順に数えた日数)と、1回に表示できる最大の月数 */
+  candidates_default_days: number;
+  candidates_range_max_months: number;
   chart_default_period: string;
   accuracy_daily_default_months: number;
   compare_sector_top_n: number;
@@ -74,7 +78,7 @@ export interface PredictionDates {
   dates: string[];
 }
 
-/** 備考の1つ(color は red・blue・orange) */
+/** 備考の1つ(color は red・blue・orange・green) */
 export interface Note {
   text: string;
   color: string;
@@ -156,6 +160,9 @@ export interface CandidatesResponse {
   market_state: MarketState | null;
   candidates: CandidateRow[];
 }
+
+/** GET /api/candidates/range(予測がある日ごと。古い日が先) */
+export type CandidatesRangeResponse = CandidatesResponse[];
 
 /** 買い候補と実際の株価の、1銘柄・1予測日数 */
 export interface ResultCell {
@@ -306,6 +313,9 @@ export interface Lot {
   quantity: number;
   buy_date: string;
   note: string | null;
+  /** 買いの金額(買値 × 買い株数)と現在の金額(現在値 × 買い株数。現在値がなければ null) */
+  buy_amount: number;
+  current_amount: number | null;
   pnl_rate: number | null;
   pnl_amount: number | null;
 }
@@ -321,6 +331,9 @@ export interface HoldingGroup {
   current_date: string | null;
   cost: number;
   value: number | null;
+  /** 買いの金額(平均買値 × 合計の株数)と現在の金額(現在値 × 合計の株数。現在値がなければ null) */
+  buy_amount: number;
+  current_amount: number | null;
   pnl_rate: number | null;
   pnl_amount: number | null;
   horizons: HorizonValue[];
@@ -339,6 +352,9 @@ export interface SoldRow {
   quantity: number;
   buy_date: string;
   sell_price: number;
+  /** 買いの金額(買値 × 売り株数)と売りの金額(売値 × 売り株数) */
+  buy_amount: number;
+  sell_amount: number;
   sell_date: string;
   current: number | null;
   pnl_rate: number | null;

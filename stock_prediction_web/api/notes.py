@@ -40,9 +40,11 @@ NOTE_RESIST_PREFIX: str = "上値抵抗線"
 
 
 def to_note(text: str) -> Note:
-    """備考の文言に、画面の色を付ける(メールと同じ。流動性注意と「MM/DD の終値」は橙、
+    """備考の文言に、画面の色を付ける(メールと同じ。流動性注意は緑、「MM/DD の終値」は橙、
     デッドクロス・赤字予想・下抜けは青、それ以外は赤)。"""
-    if text == NOTE_LOW_LIQUIDITY or is_stale_close_note(text):
+    if text == NOTE_LOW_LIQUIDITY:
+        return Note(text=text, color="green")
+    if is_stale_close_note(text):
         return Note(text=text, color="orange")
     return Note(text=text, color="blue" if is_blue_note(text) else "red")
 

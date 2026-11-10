@@ -1,4 +1,4 @@
-"""GET /api/candidates、/api/candidates/results のテスト。"""
+"""GET /api/candidates、/api/candidates/range、/api/candidates/results のテスト。"""
 
 from datetime import date
 
@@ -28,7 +28,7 @@ def test_candidates_latest(client: TestClient, sample: psycopg.Connection[DictRo
     assert texts[0] == "ストップ高"
     assert {"text": "PBR0.5倍割れ(割安)", "color": "red"} in first["notes"]
     second = body["candidates"][1]
-    assert {"text": "流動性注意", "color": "orange"} in second["notes"]
+    assert {"text": "流動性注意", "color": "green"} in second["notes"]
 
 
 def test_candidates_fallback_note(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
@@ -87,7 +87,7 @@ def test_candidates_by_date(client: TestClient, sample: psycopg.Connection[DictR
 
 
 def test_candidates_no_prediction_day(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
-    """予測がない日は 404 と のメッセージ。"""
+    """予測がない日は 404 とメッセージを返す。"""
     res = client.get("/api/candidates?date=2026-07-25")
     assert res.status_code == 404
     assert res.json() == {"detail": "この日の予測はありません(土日・祝日、またはバッチが動いていない日)"}
@@ -111,15 +111,25 @@ def test_results(client: TestClient, sample: psycopg.Connection[DictRow]) -> Non
     assert cells[const.MAIN_HORIZON]["actual"] is None
     assert first["summary"] == [{"horizon": const.PREDICT_HORIZONS[0], "market_median": 0.01, "beat_count": 2}]
     # 備考はメールと同じ(予測日ごとに計算する)
-    assert {"text": "流動性注意", "color": "orange"} in first["rows"][1]["notes"]
+    assert {"text": "流動性注意", "color": "green"} in first["rows"][1]["notes"]
 
 
 def test_results_default_period(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
-    """省略すると、最新の予測日の1か月前〜最新の予測日(2026-11-08 に3か月から変更)。"""
+    """省略すると、終了日 = 最新の株価の日の10営業日前、開始日 = 終了日の10営業日前(営業日は株価がある日で数える)。
+
+    最新の株価の日は 2026-07-22。7/20 は海の日(休日)なので、10営業日前は 7/7、さらに10営業日前は 6/23。
+    """
     body = client.get("/api/candidates/results").json()
-    assert body["date_to"] == LAST_DAY.isoformat()
-    assert body["date_from"] == "2026-06-22"
-    assert len(body["days"]) == len([d for d in pred_days() if d >= date(2026, 6, 22)])
+    assert body["date_to"] == "2026-07-07"
+    assert body["date_from"] == "2026-06-23"
+    assert len(body["days"]) == len([d for d in pred_days() if date(2026, 6, 23) <= d <= date(2026, 7, 7)])
+
+
+def test_results_default_period_without_price(client: TestClient) -> None:
+    """株価も予測もなければ、今日の10営業日前〜その10営業日前で、空の一覧を返す。"""
+    body = client.get("/api/candidates/results").json()
+    assert body["days"] == []
+    assert body["date_from"] < body["date_to"]
 
 
 def test_results_too_long(client: TestClient) -> None:
@@ -144,7 +154,71 @@ def test_candidates_sector(client: TestClient, sample: psycopg.Connection[DictRo
     assert top["kind"] == "top" and top["candidates"][0]["sector"] == "銀行業"
 
 
+def test_candidates_range(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """期間の予測がある日ごとに、/api/candidates と同じ中身を、古い日が先で返す。"""
+    days = pred_days()
+    body = client.get(f"/api/candidates/range?from={days[0].isoformat()}&to={days[-1].isoformat()}").json()
+    assert [d["pred_date"] for d in body] == [d.isoformat() for d in days]
+    assert all(d["kind"] == "top" for d in body)
+    for d in body:
+        assert d == client.get(f"/api/candidates?date={d['pred_date']}").json()
+    assert [c["code"] for c in body[0]["candidates"]] == ["11110", "11120", "11140"]
+
+
+def test_candidates_range_skips_days_without_prediction(
+    client: TestClient, sample: psycopg.Connection[DictRow]
+) -> None:
+    """予測がない日は含めない。期間に予測が1日もなければ、404 にせず空の配列。"""
+    days = pred_days()
+    # 予測日の間(営業日でない日)や、予測より前だけの期間
+    body = client.get(f"/api/candidates/range?from={days[0].isoformat()}&to={days[1].isoformat()}").json()
+    assert [d["pred_date"] for d in body] == [days[0].isoformat(), days[1].isoformat()]
+    res = client.get("/api/candidates/range?from=2026-07-25&to=2026-07-31")
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_candidates_range_sector(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """kind=sector なら、業種分散の買い候補を日ごとに返す。"""
+    days = pred_days()
+    body = client.get(f"/api/candidates/range?from={days[0].isoformat()}&to={days[-1].isoformat()}&kind=sector").json()
+    assert [d["kind"] for d in body] == ["sector"] * len(days)
+    assert [c["code"] for c in body[0]["candidates"]] == ["11110", "11120", "11130"]
+
+
+def test_candidates_range_fallback_note(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """上昇確率の条件を置き換えた日にだけ fallback_note が付く(日ごとに計算する)。"""
+    sample.execute(
+        "UPDATE prediction SET up_prob = 0.45 WHERE code = '11110' AND pred_date = %s AND horizon = %s",
+        (LAST_DAY, const.MAIN_HORIZON),
+    )
+    days = pred_days()
+    body = client.get(f"/api/candidates/range?from={days[0].isoformat()}&to={days[-1].isoformat()}").json()
+    assert [d["fallback_note"] is not None for d in body] == [False] * (len(days) - 1) + [True]
+
+
+def test_candidates_range_errors(client: TestClient) -> None:
+    """from・to は必須。開始日が終了日より後なら 400。1か月を超えたら 400。ちょうど1か月は通る。"""
+    for path in (
+        "/api/candidates/range",
+        "/api/candidates/range?from=2026-07-01",
+        "/api/candidates/range?to=2026-07-01",
+    ):
+        res = client.get(path)
+        assert res.status_code == 400
+        assert res.json() == {"detail": "from と to を指定してください"}
+    res = client.get("/api/candidates/range?from=2026-07-22&to=2026-07-01")
+    assert (res.status_code, res.json()) == (400, {"detail": "開始日が終了日より後になっています"})
+    res = client.get("/api/candidates/range?from=2026-06-21&to=2026-07-22")
+    assert (res.status_code, res.json()) == (400, {"detail": "期間は1か月以内にしてください"})
+    assert client.get("/api/candidates/range?from=2026-06-22&to=2026-07-22").status_code == 200
+    # 2/28 の1か月前は 1/28、月末のない月は末日(RESULTS_MAX_MONTHS と同じ決め方)
+    assert client.get("/api/candidates/range?from=2026-01-31&to=2026-02-28").status_code == 200
+
+
 def test_candidates_bad_kind(client: TestClient) -> None:
+    res = client.get("/api/candidates/range?from=2026-07-01&to=2026-07-22&kind=x")
+    assert res.status_code == 400
     for path in ("/api/candidates?kind=x", "/api/candidates/results?kind=x"):
         res = client.get(path)
         assert res.status_code == 400

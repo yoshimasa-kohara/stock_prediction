@@ -1,9 +1,9 @@
-"""銘柄の API(5章 No.2 上のメニューの検索、6.5 保有銘柄の登録)。
+"""銘柄の API。
 
-GET /api/stocks/search: 銘柄コード(前方一致)・銘柄名(部分一致)で探す(7章 No.14)
-GET /api/stocks/{code}: 銘柄の情報、指標、次の決算発表予定日、備考(7章 No.4)
-GET /api/stocks/{code}/prices: 株式分割を調整した株価、移動平均、ボリンジャーバンド、トレンドライン(7章 No.5)
-GET /api/stocks/{code}/predictions: 最新の予測と、過去の予測と答え合わせ(7章 No.6)
+GET /api/stocks/search: 銘柄コード(前方一致)・銘柄名(部分一致)で探す
+GET /api/stocks/{code}: 銘柄の情報、指標、次の決算発表予定日、備考
+GET /api/stocks/{code}/prices: 株式分割を調整した株価、移動平均、ボリンジャーバンド、トレンドライン
+GET /api/stocks/{code}/predictions: 最新の予測と、過去の予測と答え合わせ
 """
 
 import math

@@ -441,14 +441,16 @@ def test_通知メールの内容(notify_data: psycopg.Connection[DictRow], smtp
     assert "市場比の確率が高い順(上昇確率50%以上・見込みプラス)" in html_body
     assert "主となる日数: 20営業日後" in html_body
     assert '<span style="color:#c00000;">ストップ高</span>' in html_body
-    assert '<span style="color:#b35900;">流動性注意</span>' in html_body
+    assert '<span style="color:#2e7d32;">流動性注意</span>' in html_body
     # 保有銘柄: 売却済みと、購入日が指定日より後の行は出さない。判定と損益の色
     assert html_body.count(">保持</td>") == 1
     assert 'color:#c00000;font-weight:bold;">売却(下降予測、市場の中央値も下回る予測)</td>' in html_body
-    assert 'color:#b35900;font-weight:bold;">保持(注意: 上昇予測だが下降しています)</td>' in html_body
-    assert 'color:#b35900;font-weight:bold;">乗り換えを検討(上昇予測だが市場の中央値を下回る予測)</td>' in html_body
-    assert 'color:#b35900;font-weight:bold;">保持(注意: 相場全体が下がる予測)</td>' in html_body
-    assert "判定なし(本日の予測がありません)" in html_body
+    assert 'color:#f57c00;font-weight:bold;">保持(注意: 上昇予測だが下降しています)</td>' in html_body
+    assert 'color:#f57c00;font-weight:bold;">乗り換えを検討(上昇予測だが市場の中央値を下回る予測)</td>' in html_body
+    assert 'color:#f57c00;font-weight:bold;">保持(注意: 相場全体が下がる予測)</td>' in html_body
+    # 判定なしは緑(太字にしない)
+    assert 'color:#2e7d32;">判定なし(本日の予測がありません)</td>' in html_body
+    assert 'font-weight:bold;">判定なし' not in html_body
     assert 'color:#c00000;">+6.3%</td>' in html_body and 'color:#0055cc;">-1.3%</td>' in html_body
     # 損切りライン。買値から12%下がった 99990 だけ。-4.0% の 33330 には出さない
     assert html_body.count('<span style="color:#c00000;">損切りライン10%の値を下回っています。</span>') == 1
@@ -518,7 +520,13 @@ def test_買い増しした銘柄は1行にまとめて平均買値で判定す�
     html_body, text = _bodies(smtp.sent[0])
     assert html_body.count(">☆☆建設</td>") == 2  # 買い候補(業種分散)と保有銘柄(保有銘柄は1行にまとめる)
     assert ">1,925</td>" in html_body and 'color:#0055cc;">-0.3%</td>' in html_body
-    assert "3333 ☆☆建設 / 買値 1,925 現在値 1,920 損益 -0.3%" in text
+    assert (
+        "3333 ☆☆建設 / 買値 1,925 買い株数 200 買いの金額 385,000 購入日 2回に分けて購入"
+        " 現在値 1,920 現在の金額 384,000 損益 -0.3%(-1,000円)"
+    ) in text
+    assert (
+        "└ 買値 2,000 買い株数 100 買いの金額 200,000 購入日 2026-06-01 現在の金額 192,000 損益 -4.0%(-8,000円)" in text
+    )
 
 
 def test_保有銘柄の現在値はその日以前で一番新しい終値で備考に日付を出す(
@@ -538,7 +546,7 @@ def test_保有銘柄の現在値はその日以前で一番新しい終値で�
     assert notify_core.is_stale_close_note("07/06 の終値") and not notify_core.is_stale_close_note("ストップ高")
     notify_core.run_notify(T5)
     html_body, text = _bodies(smtp.sent[0])
-    assert f'<span style="color:{notify_core._ORANGE};">07/06 の終値</span>' in html_body
+    assert f'<span style="color:{notify_core.COLOR_CAUTION};">07/06 の終値</span>' in html_body
     assert "07/06 の終値" in text
 
 
@@ -993,3 +1001,83 @@ def test_単独の通知は一部の宛先に送れなければ失敗(
     warnings = BatchWarnings()
     subject = notify_core.run_notify(T5, warnings=warnings)
     assert len(warnings.items) == 1 and subject in warnings.items[0].message
+
+
+def test_備考の色_終値の日付と流動性注意() -> None:
+    """流動性注意は緑 #2e7d32、「MM/DD の終値」は橙 #f57c00(判定の注意と同じ色)。注意の箱の #b35900 とは別。"""
+    html_text = notify_core._note_html(["11/05 の終値", "流動性注意", "ストップ高"])
+    assert html_text == (
+        '<span style="color:#f57c00;">11/05 の終値</span>／<span style="color:#2e7d32;">流動性注意</span>／'
+        '<span style="color:#c00000;">ストップ高</span>'
+    )
+    assert notify_core.COLOR_CAUTION == "#f57c00" and notify_core.COLOR_QUIET == "#2e7d32"
+    assert notify_core._ORANGE == "#b35900"
+
+
+def test_判定の色() -> None:
+    """判定の色: 保持は色なし、注意と乗り換えは #f57c00 の太字、売却は赤の太字、判定なしは緑(太字にしない)。"""
+    style = notify_core._judgment_style
+    assert style(notify_core.JUDGE_HOLD) == ""
+    assert style(notify_core.JUDGE_HOLD_DROP) == "color:#f57c00;font-weight:bold;"
+    assert style(notify_core.JUDGE_HOLD_MARKET_DOWN) == "color:#f57c00;font-weight:bold;"
+    assert style(notify_core.JUDGE_SWITCH) == "color:#f57c00;font-weight:bold;"
+    assert style(notify_core.JUDGE_SELL) == "color:#c00000;font-weight:bold;"
+    assert style(notify_core.JUDGE_NONE) == "color:#2e7d32;"
+
+
+def test_保有銘柄の列と購入ごとの行と合計(notify_data: psycopg.Connection[DictRow], smtp: type[FakeSMTP]) -> None:
+    """保有銘柄の表: 買い株数・買いの金額・購入日・現在の金額・損益(円)の列。買い増しは合計の行の下に購入ごとの行。"""
+    # 11110 を買い増し(平均買値は 800 のまま)
+    notify_data.execute(
+        "INSERT INTO holding (code, buy_price, quantity, buy_date, sell_date)"
+        " VALUES ('11110', 800, 50, '2026-06-20', NULL)"
+    )
+    notify_core.run_notify(T5)
+    html_body, text = _bodies(smtp.sent[0])
+    holdings_html = html_body[html_body.index(">保有銘柄</div>") : html_body.index(">的中率(検証結果)</div>")]
+    for head in ("買い株数", "買いの金額", "購入日", "現在の金額", "損益(%)", "損益(円)"):
+        assert f">{head}</th>" in holdings_html
+    assert ">操作</th>" not in holdings_html
+    data = notify_core.load_notify_data(notify_data, T5)
+    hd = next(h for h in data.holdings if h.code == "11110")
+    assert hd.current is not None and hd.quantity == 150 and [lot.quantity for lot in hd.lots] == [100, 50]
+    cur = hd.current
+    # 合計の行: 平均買値 × 合計の株数、現在値 × 合計の株数。購入日は「N回に分けて購入」
+    assert ">2回に分けて購入</td>" in holdings_html
+    assert f">{notify_core.fmt_price(Decimal(800) * 150)}</td>" in holdings_html
+    assert f">{notify_core.fmt_price(cur * 150)}</td>" in holdings_html
+    # 購入ごとの行(銘柄名の列に「└」)は、合計の行の下に2行
+    assert holdings_html.count(">└</td>") == 2
+    for qty, date_text in ((100, "2026-06-15"), (50, "2026-06-20")):
+        assert f">{notify_core.fmt_price(Decimal(800) * qty)}</td>" in holdings_html
+        assert f">{notify_core.fmt_price(cur * qty)}</td>" in holdings_html
+        assert f">{date_text}</td>" in holdings_html
+    # 購入ごとの行は、合計の行の直後に続く
+    total_pos = holdings_html.index(">2回に分けて購入</td>")
+    assert total_pos < holdings_html.index(">└</td>") < holdings_html.index("2026-06-20")
+    # 1回の購入の銘柄には購入ごとの行を出さず、購入日をそのまま出す
+    assert ">2026-06-01</td>" in holdings_html
+    # 表の上の合計は、画面と同じ関数(holding_totals)の結果
+    totals = notify_core.holding_totals([(h.buy_price * h.quantity, h.current, h.quantity) for h in data.holdings])
+    assert f"買値の合計 {notify_core.fmt_price(totals.cost)}円" in holdings_html
+    assert f"今の評価額 {notify_core.fmt_price(totals.value)}円" in holdings_html
+    summary = notify_core.holding_totals_text(data.holdings)
+    assert summary in holdings_html and summary in text
+    # テキスト形式: 購入ごとの行は「└ 」で始まる行
+    lines = [ln for ln in text.splitlines() if ln.startswith("└ ")]
+    assert len(lines) == 2
+    assert f"買い株数 100 買いの金額 {notify_core.fmt_price(Decimal(80000))} 購入日 2026-06-15" in lines[0]
+    assert f"買い株数 50 買いの金額 {notify_core.fmt_price(Decimal(40000))} 購入日 2026-06-20" in lines[1]
+    assert "購入日 2回に分けて購入" in text
+
+
+def test_保有銘柄の合計_現在値がない銘柄は評価額と損益に入れない() -> None:
+    items = [
+        (Decimal(100000), Decimal(1100), 100),  # 評価額 110,000
+        (Decimal(50000), None, 100),  # 現在値なし
+    ]
+    t = notify_core.holding_totals(items)
+    assert (t.cost, t.value, t.pnl_amount) == (Decimal(150000), Decimal(110000), Decimal(10000))
+    assert t.pnl_rate == Decimal(10000) / Decimal(100000)
+    empty = notify_core.holding_totals([])
+    assert (empty.cost, empty.value, empty.pnl_amount, empty.pnl_rate) == (Decimal(0), Decimal(0), Decimal(0), None)

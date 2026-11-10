@@ -30,7 +30,7 @@
 - `*.py`(直下)  : 実行ファイル。引数の解釈と、`core` の呼び出しだけを行う
 - `const.py`     : 数値・文字列の設定値(`import const` で読む)
 - `common\`      : 共通の部品(DB 接続、ログ、引数、J-Quants の呼び出し、リクエストの上限、メール、実行履歴、営業日、銘柄コードの表示)
-- `core\`        : 各処理の本体(`*_core.py`)、特徴量の計算(`features.py`)、トレンドラインの計算(`trendline.py`)、日経平均の取得(`index_collect_core.py`)
+- `core\`        : 各処理の本体(`*_core.py`)、特徴量の計算(`features.py`)、トレンドラインの計算(`trendline.py`)、日経平均の取得(`index_collect_core.py`)、相場の状態(強い・普通・弱い)の計算と文言(`market_state_core.py`)
 - `etc\db\sql\`  : `create_tables.sql`(テーブル定義。**各 CREATE TABLE の前に DROP TABLE があり、実行すると全データが消える**)
 - `tests\`       : テスト。`sample_data.py` は架空のデータ
 - `tools\`       : 調査・評価用の道具(本番のバッチからは呼ばない)
@@ -53,7 +53,9 @@
 - 買い候補は2つ。買い候補(`buy_rank`。上位 `BUY_CANDIDATE_COUNT` 件)と、買い候補(業種分散。`buy_rank_sector`。同じ33業種は `SECTOR_CAP_PER_SECTOR` 銘柄まで)。
   条件を満たす銘柄が足りない日は、上昇確率の条件を上位 `BUY_CANDIDATE_FALLBACK_TOP_RATE` に置き換えて選び直す
 - 画面とメールの銘柄コードは `common\stock_code.py` の `display_code` で出す(5桁目が 0 なら4桁。DB は5桁のまま)
-- 保有銘柄(holding)は購入ごとに1行。メールでは銘柄ごとにまとめて平均買値で表示・判定する(`core\notify_core.py` の `average_buy_price`)
+- 保有銘柄(holding)は購入ごとに1行。メールでは銘柄ごとにまとめて平均買値で表示・判定する(`core\notify_core.py` の `average_buy_price`)。
+  購入ごとの行は `HoldingLot`(購入日の古い順)。保有中の合計(評価額・損益)は `holding_totals` で求め、画面の保有銘柄も同じ関数を使う。現在値がない銘柄は評価額と損益に入れない
+- 備考の色: 流動性注意は緑(`COLOR_QUIET`)、「MM/DD の終値」は橙(`COLOR_CAUTION`)、デッドクロス・赤字予想・下値支持線の下抜けは青、それ以外は赤。画面(web の `api\notes.py`)もメールと同じ色にする
 - ボリンジャーバンドの日数(`const.py` の `BB_DAYS`)を変えたら、必ず学習し直してから予測する
 - トレンドライン(`core\trendline.py`)は、谷・山を結び、はみ出しがなく、接触回数が一番多い線を引く。
   接触3回以上の線を3%以上抜けたことを、買い候補と保有銘柄の備考に出す

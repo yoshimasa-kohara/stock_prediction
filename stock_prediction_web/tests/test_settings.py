@@ -16,8 +16,11 @@ def test_settings_returns_web_and_batch_values(client: TestClient) -> None:
     assert web["status_refresh_sec"] == web_const.STATUS_REFRESH_SEC
     assert web["stock_search_limit"] == web_const.STOCK_SEARCH_LIMIT
     assert web["top_candidate_count"] == web_const.TOP_CANDIDATE_COUNT
-    assert web["results_default_months"] == web_const.RESULTS_DEFAULT_MONTHS
+    assert web["results_default_end_offset_days"] == web_const.RESULTS_DEFAULT_END_OFFSET_DAYS
+    assert web["results_default_span_days"] == web_const.RESULTS_DEFAULT_SPAN_DAYS
     assert web["results_max_months"] == web_const.RESULTS_MAX_MONTHS
+    assert web["candidates_default_days"] == web_const.CANDIDATES_DEFAULT_DAYS
+    assert web["candidates_range_max_months"] == web_const.CANDIDATES_RANGE_MAX_MONTHS
     assert web["chart_default_period"] == web_const.CHART_DEFAULT_PERIOD
     assert web["accuracy_daily_default_months"] == web_const.ACCURACY_DAILY_DEFAULT_MONTHS
     assert web["compare_sector_top_n"] == web_const.COMPARE_SECTOR_TOP_N

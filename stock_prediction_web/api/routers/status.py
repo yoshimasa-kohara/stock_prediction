@@ -137,6 +137,11 @@ def get_prediction_dates(
         date_from: この日以降(省略すると全て)。クエリの名前は from
         date_to: この日以前(省略すると全て)。クエリの名前は to
     """
+    return PredictionDatesResponse(dates=list_prediction_dates(conn, date_from, date_to))
+
+
+def list_prediction_dates(conn: Conn, date_from: date | None, date_to: date | None) -> list[date]:
+    """予測がある日を古い順に返す(/api/prediction-dates と /api/candidates/range が共通で使う)。"""
     if date_from and date_to and date_from > date_to:
         raise ApiError(400, "開始日が終了日より後になっています")
     rows = conn.execute(
@@ -151,4 +156,4 @@ def get_prediction_dates(
         """,
         {"from": date_from or date.min, "to": date_to or date.max},
     ).fetchall()
-    return PredictionDatesResponse(dates=[r["v"] for r in rows])
+    return [r["v"] for r in rows]

@@ -19,8 +19,11 @@ class WebSettings(BaseModel):
     status_refresh_sec: int
     stock_search_limit: int
     top_candidate_count: int
-    results_default_months: int
+    results_default_end_offset_days: int
+    results_default_span_days: int
     results_max_months: int
+    candidates_default_days: int
+    candidates_range_max_months: int
     chart_default_period: str
     accuracy_daily_default_months: int
     compare_sector_top_n: int
@@ -62,8 +65,11 @@ def build_settings() -> SettingsResponse:
             status_refresh_sec=web_const.STATUS_REFRESH_SEC,
             stock_search_limit=web_const.STOCK_SEARCH_LIMIT,
             top_candidate_count=web_const.TOP_CANDIDATE_COUNT,
-            results_default_months=web_const.RESULTS_DEFAULT_MONTHS,
+            results_default_end_offset_days=web_const.RESULTS_DEFAULT_END_OFFSET_DAYS,
+            results_default_span_days=web_const.RESULTS_DEFAULT_SPAN_DAYS,
             results_max_months=web_const.RESULTS_MAX_MONTHS,
+            candidates_default_days=web_const.CANDIDATES_DEFAULT_DAYS,
+            candidates_range_max_months=web_const.CANDIDATES_RANGE_MAX_MONTHS,
             chart_default_period=web_const.CHART_DEFAULT_PERIOD,
             accuracy_daily_default_months=web_const.ACCURACY_DAILY_DEFAULT_MONTHS,
             compare_sector_top_n=web_const.COMPARE_SECTOR_TOP_N,

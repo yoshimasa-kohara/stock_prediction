@@ -1,4 +1,4 @@
-"""保有銘柄の API(7章 No.7〜10)。画面が DB に書き込むのは、この holding(保有銘柄)だけ。
+"""保有銘柄の API。画面が DB に書き込むのは、この holding(保有銘柄)だけ。
 
 GET  /api/holdings: 保有中の銘柄(銘柄ごとの合計の行と購入ごとの行)と判定・損益・備考、売却済みの行
 POST /api/holdings: 登録(買い増しも、購入ごとに別の行として登録する)
@@ -22,7 +22,14 @@ from api.deps import Conn
 from api.errors import ApiError
 from api.logger import log_api
 from api.notes import signal_notes, to_notes
-from core.notify_core import average_buy_price, hits_stop_loss, judge_holding, stale_close_note, stop_loss_note
+from core.notify_core import (
+    average_buy_price,
+    hits_stop_loss,
+    holding_totals,
+    judge_holding,
+    stale_close_note,
+    stop_loss_note,
+)
 
 router = APIRouter()
 
@@ -42,6 +49,9 @@ class Lot(BaseModel):
     note: str | None
     pnl_rate: float | None
     pnl_amount: float | None
+    # 買いの金額(買値 × 買い株数)と現在の金額(現在値 × 買い株数。現在値がなければ None)
+    buy_amount: float
+    current_amount: float | None
 
 
 class HoldingGroup(BaseModel):
@@ -56,6 +66,9 @@ class HoldingGroup(BaseModel):
     current_date: date | None
     cost: float
     value: float | None
+    # 買いの金額(平均買値 × 合計の株数)と現在の金額(現在値 × 合計の株数。現在値がなければ None)
+    buy_amount: float
+    current_amount: float | None
     pnl_rate: float | None
     pnl_amount: float | None
     horizons: list[HorizonValue]
@@ -75,6 +88,9 @@ class SoldRow(BaseModel):
     quantity: int
     buy_date: date
     sell_price: float
+    # 買いの金額(買値 × 売り株数)と売りの金額(売値 × 売り株数。売値がない行は買値で数える)
+    buy_amount: float
+    sell_amount: float
     sell_date: date
     current: float | None
     pnl_rate: float | None
@@ -164,7 +180,7 @@ def get_holdings(
     signals = signal_notes(conn, judge_date, codes) if judge_date is not None else {}
 
     groups: list[HoldingGroup] = []
-    total_cost = total_value = total_pnl_cost = Decimal(0)
+    total_items: list[tuple[Decimal, Decimal | None, int]] = []
     for code in codes:
         rows = [r for r in open_rows if str(r["code"]) == code]
         cost = sum((Decimal(r["buy_price"]) * int(r["quantity"]) for r in rows), Decimal(0))
@@ -185,10 +201,7 @@ def get_holdings(
             notes.append(stop_loss_note())
         notes += signals.get(code, [])
         rate, amount = _pnl(avg, current, quantity)
-        total_cost += cost
-        if current is not None:
-            total_value += current * quantity
-            total_pnl_cost += cost
+        total_items.append((cost, current, quantity))
         info = master.get(code)
         groups.append(
             HoldingGroup(
@@ -201,6 +214,8 @@ def get_holdings(
                 current_date=current_date,
                 cost=float(cost),
                 value=None if current is None else float(current * quantity),
+                buy_amount=float(cost),
+                current_amount=None if current is None else float(current * quantity),
                 pnl_rate=rate,
                 pnl_amount=amount,
                 horizons=horizon_values(by_h),
@@ -213,6 +228,8 @@ def get_holdings(
                         quantity=int(r["quantity"]),
                         buy_date=r["buy_date"],
                         note=r["note"],
+                        buy_amount=float(Decimal(r["buy_price"]) * int(r["quantity"])),
+                        current_amount=None if current is None else float(current * int(r["quantity"])),
                         pnl_rate=_pnl(Decimal(r["buy_price"]), current, int(r["quantity"]))[0],
                         pnl_amount=_pnl(Decimal(r["buy_price"]), current, int(r["quantity"]))[1],
                     )
@@ -220,12 +237,13 @@ def get_holdings(
                 ],
             )
         )
-    pnl_total = total_value - total_pnl_cost
+    # 合計はメールの表の上の合計と同じ関数で求める
+    t = holding_totals(total_items)
     totals = Totals(
-        cost=float(total_cost),
-        value=float(total_value),
-        pnl_amount=float(pnl_total),
-        pnl_rate=float(pnl_total / total_pnl_cost) if total_pnl_cost > 0 else None,
+        cost=float(t.cost),
+        value=float(t.value),
+        pnl_amount=float(t.pnl_amount),
+        pnl_rate=None if t.pnl_rate is None else float(t.pnl_rate),
     )
 
     sold_rows = conn.execute(
@@ -256,6 +274,8 @@ def get_holdings(
                 quantity=qty,
                 buy_date=r["buy_date"],
                 sell_price=float(sell),
+                buy_amount=float(buy * qty),
+                sell_amount=float(sell * qty),
                 sell_date=r["sell_date"],
                 current=to_float(sold_closes.get(code, (None, None))[0]),
                 pnl_rate=rate,

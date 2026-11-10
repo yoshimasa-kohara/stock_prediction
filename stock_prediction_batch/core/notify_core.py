@@ -48,7 +48,12 @@ _WEEKDAYS: str = "月火水木金土日"
 # 見た目
 _RED: str = "#c00000"
 _BLUE: str = "#0055cc"
+# 注意の箱(上昇確率の条件を置き換えた日の注記、上昇確率のずれの注意)の色
 _ORANGE: str = "#b35900"
+# 判定「保持(注意…)」「乗り換えを検討」と、備考「MM/DD の終値」の色(太字は判定だけ)
+COLOR_CAUTION: str = "#f57c00"
+# 判定「判定なし」と、備考「流動性注意」の色(太字にしない)
+COLOR_QUIET: str = "#2e7d32"
 _GRAY_TEXT: str = "#666666"
 _TH: str = "border:1px solid #b8c4d6;padding:4px 8px;"
 _TD: str = "border:1px solid #cccccc;padding:4px 8px;"
@@ -98,7 +103,7 @@ NOTE_DEAD_MID: str = "中長期デッドクロス発生"
 # 割安さ・稼ぐ力の備考。PBR と ROE の文言は、閾値から作る(pbr_note、roe_note)
 NOTE_PER_LOW: str = "予想PERが業種平均より低い(割安)"
 NOTE_DEFICIT: str = "赤字予想(業績注意)"
-# 青で表示する備考(悪い材料)。流動性注意はオレンジ、それ以外は赤(良い材料・目立たせたいもの)
+# 青で表示する備考(悪い材料)。流動性注意は緑、それ以外は赤(良い材料・目立たせたいもの)
 BLUE_NOTES: frozenset[str] = frozenset({NOTE_DEAD_SHORT, NOTE_DEAD_MID, NOTE_DEFICIT})
 
 
@@ -119,7 +124,7 @@ def stale_close_note(close_date: date) -> str:
 
 
 def is_stale_close_note(note: str) -> bool:
-    """「MM/DD の終値」の備考か。橙で表示する(流動性注意と同じ注意の色)。"""
+    """「MM/DD の終値」の備考か。注意の色(COLOR_CAUTION)で表示する。"""
     return _STALE_CLOSE_RE.match(note) is not None
 
 
@@ -244,6 +249,15 @@ class Candidate:
 
 
 @dataclass
+class HoldingLot:
+    """保有銘柄の購入ごとの行(holding の1行)。"""
+
+    buy_price: Decimal
+    quantity: int
+    buy_date: date
+
+
+@dataclass
 class Holding:
     """保有銘柄の1行。同じ銘柄を複数回買った場合(買い増し)は、銘柄ごとに1行にまとめる。"""
 
@@ -257,6 +271,7 @@ class Holding:
     market: str = ""  # 市場(銘柄マスタの市場区分名)
     quantity: int = 0  # 株数(まとめた行の合計)
     current_date: date | None = None  # 現在値(終値)の日。判定の日以前で一番新しい終値の日
+    lots: list[HoldingLot] = field(default_factory=list)  # 購入ごとの行(購入日の古い順)
 
 
 @dataclass
@@ -390,6 +405,32 @@ def average_buy_price(cost: Decimal, quantity: int) -> Decimal:
     return cost / quantity
 
 
+@dataclass
+class HoldingTotals:
+    """保有中の銘柄の合計(画面の合計のカードとメールの表の上の合計)。"""
+
+    cost: Decimal  # 買値の合計(全ての銘柄の 買値 × 株数)
+    value: Decimal  # 今の評価額(現在値がある銘柄だけの 現在値 × 株数)
+    pnl_amount: Decimal  # 損益(円)= 評価額 − 現在値がある銘柄の買値の合計
+    pnl_rate: Decimal | None  # 損益(%)。現在値がある銘柄の買値の合計が0なら None
+
+
+def holding_totals(items: list[tuple[Decimal, Decimal | None, int]]) -> HoldingTotals:
+    """保有中の銘柄の合計を求める。現在値がない銘柄は、評価額と損益に入れない。
+
+    Args:
+        items: 銘柄ごとの (買値 × 株数の合計, 現在値, 株数の合計)
+    """
+    cost = value = priced_cost = Decimal(0)
+    for item_cost, current, quantity in items:
+        cost += item_cost
+        if current is not None:
+            value += current * quantity
+            priced_cost += item_cost
+    pnl = value - priced_cost
+    return HoldingTotals(cost, value, pnl, pnl / priced_cost if priced_cost > 0 else None)
+
+
 def judge_holding(
     rel_prob: Decimal | None, up_prob: Decimal | None, buy_price: Decimal, current: Decimal | None
 ) -> str:
@@ -494,7 +535,7 @@ def load_notify_data(conn: psycopg.Connection[DictRow], target_date: date) -> No
     holdings: list[Holding] = []
     rows = conn.execute(
         """
-        SELECT h.holding_id, h.code, h.buy_price, h.quantity, p.close, p.trade_date
+        SELECT h.holding_id, h.code, h.buy_price, h.quantity, h.buy_date, p.close, p.trade_date
         FROM holding h
         LEFT JOIN LATERAL (
             SELECT close, trade_date FROM daily_price
@@ -508,17 +549,19 @@ def load_notify_data(conn: psycopg.Connection[DictRow], target_date: date) -> No
     ).fetchall()
     # 銘柄ごとに、買値 × 株数の合計と株数の合計を集める(並びは最初に買った行の順)
     lots: dict[str, tuple[Decimal, int, Decimal | None, date | None]] = {}
+    lot_rows: dict[str, list[HoldingLot]] = {}
     for r in rows:
         code = str(r["code"])
         quantity = int(r["quantity"])
         current = None if r["close"] is None else Decimal(r["close"])
         cost, total, _, _ = lots.get(code, (Decimal(0), 0, current, r["trade_date"]))
         lots[code] = (cost + Decimal(r["buy_price"]) * quantity, total + quantity, current, r["trade_date"])
+        lot_rows.setdefault(code, []).append(HoldingLot(Decimal(r["buy_price"]), quantity, r["buy_date"]))
     for code, (cost, total, current, current_date) in lots.items():
         buy_price = average_buy_price(cost, total)
         hd = Holding(
             code, names.get(code, ""), buy_price, current, market=markets.get(code, ""), quantity=total,
-            current_date=current_date,
+            current_date=current_date, lots=lot_rows[code],
         )  # fmt: skip
         for h, p in preds.get(code, {}).items():
             hd.by_horizon[h] = _horizon_values(p)
@@ -656,11 +699,17 @@ def _market_state_html(market_state: MarketState | None, index_trend: IndexTrend
 
 
 def _note_html(notes: list[str]) -> str:
-    """備考。流動性注意と「MM/DD の終値」はオレンジ、デッドクロス・赤字予想・下値支持線の下抜けは青(is_blue_note)、
+    """備考の色。流動性注意は緑(COLOR_QUIET)、「MM/DD の終値」は橙(COLOR_CAUTION)、
+    デッドクロス・赤字予想・下値支持線の下抜けは青(is_blue_note)、
     それ以外(ストップ高・ストップ安・ゴールデンクロス・上値抵抗線の上抜け・損切りライン・割安・稼ぐ力)は赤。"""
     parts = []
     for n in notes:
-        color = _ORANGE if n == NOTE_LOW_LIQUIDITY or is_stale_close_note(n) else (_BLUE if is_blue_note(n) else _RED)
+        if n == NOTE_LOW_LIQUIDITY:
+            color = COLOR_QUIET
+        elif is_stale_close_note(n):
+            color = COLOR_CAUTION
+        else:
+            color = _BLUE if is_blue_note(n) else _RED
         parts.append(f'<span style="color:{color};">{_e(n)}</span>')
     return NOTE_SEPARATOR.join(parts)
 
@@ -669,7 +718,9 @@ def _judgment_style(judgment: str) -> str:
     if judgment.startswith("売却"):
         return f"color:{_RED};font-weight:bold;"
     if judgment.startswith("保持(注意") or judgment.startswith("乗り換え"):
-        return f"color:{_ORANGE};font-weight:bold;"
+        return f"color:{COLOR_CAUTION};font-weight:bold;"
+    if judgment == JUDGE_NONE:
+        return f"color:{COLOR_QUIET};"
     return ""
 
 
@@ -702,8 +753,7 @@ def _rate_cell(row: dict[str, Any] | None, column: str, sign: bool) -> str:
 
 
 def _candidate_table(candidates: list[Candidate]) -> list[str]:
-    """買い候補の表(HTML)。0銘柄の日も表の見出しは出し、1行目を全ての列で連結して「買い候補はありません」と表示する
-   。"""
+    """買い候補の表(HTML)。0銘柄の日も表の見出しは出し、1行目を全ての列で連結して「買い候補はありません」と表示する。"""
     out = [_TABLE]
     out.append(
         f"<tr{_HEAD_ROW}>"
@@ -724,6 +774,95 @@ def _candidate_table(candidates: list[Candidate]) -> list[str]:
             + _horizon_cells(c.by_horizon)
             + f'<td style="{_TD}">{_note_html(c.notes)}</td></tr>'
         )
+    out.append("</table>")
+    return out
+
+
+def _holding_totals(holdings: list[Holding]) -> HoldingTotals:
+    return holding_totals([(hd.buy_price * hd.quantity, hd.current, hd.quantity) for hd in holdings])
+
+
+def _pnl_cells(buy_price: Decimal, current: Decimal | None, quantity: int) -> tuple[str, str, str]:
+    """損益(%)と損益(円)の文字と、色の style(現在値がなければ「-」)。"""
+    if current is None or buy_price == 0:
+        return "-", "-", ""
+    change = (current - buy_price) / buy_price
+    style = f"color:{_RED};" if change > 0 else (f"color:{_BLUE};" if change < 0 else "")
+    return fmt_rate(change, sign=True), f"{_round((current - buy_price) * quantity, '1'):+,.0f}", style
+
+
+def _amount(price: Decimal | None, quantity: int) -> str:
+    """金額(価格 × 株数)。3けたごとにカンマを入れた整数。価格がなければ「-」。"""
+    return "-" if price is None else fmt_price(price * quantity)
+
+
+def _purchase_date_text(hd: Holding) -> str:
+    """購入日の列。買い増しの銘柄は「N回に分けて購入」(画面と同じ)。"""
+    if len(hd.lots) > 1:
+        return f"{len(hd.lots)}回に分けて購入"
+    return hd.lots[0].buy_date.isoformat() if hd.lots else "-"
+
+
+def holding_totals_text(holdings: list[Holding]) -> str:
+    """表の上に出す合計(買値の合計、今の評価額、損益)。"""
+    t = _holding_totals(holdings)
+    return (
+        f"買値の合計 {fmt_price(t.cost)}円 / 今の評価額 {fmt_price(t.value)}円 / "
+        f"損益 {_round(t.pnl_amount):+,.0f}円({fmt_rate(t.pnl_rate, sign=True)})"
+    )
+
+
+def _holdings_html(holdings: list[Holding]) -> list[str]:
+    """保有銘柄の合計と表(HTML)。買い増しの銘柄は、合計の行の下に購入ごとの行をいつも出す。"""
+    out = [f'<div style="font-size:13px;margin-bottom:6px;">{_e(holding_totals_text(holdings))}</div>', _TABLE]
+    heads = (
+        "コード", "銘柄名", "市場", "買値", "買い株数", "買いの金額", "購入日", "現在値", "現在の金額",
+        "損益(%)", "損益(円)",
+    )  # fmt: skip
+    out.append(
+        f"<tr{_HEAD_ROW}>"
+        + "".join(f'<th style="{_TH}">{h}</th>' for h in heads)
+        + _horizon_headers()
+        + f'<th style="{_TH}">判定</th><th style="{_TH}">備考</th></tr>'
+    )
+    blank_horizons = f'<td style="{_TD}"></td>' * (len(const.PREDICT_HORIZONS) * len(_HORIZON_COLUMNS))
+    for i, hd in enumerate(holdings):
+        rate, amount, pnl_style = _pnl_cells(hd.buy_price, hd.current, hd.quantity)
+        stripe = _STRIPE if i % 2 else ""
+        out.append(
+            f"<tr{stripe}>"
+            f'<td style="{_TD}">{_e(display_code(hd.code))}</td><td style="{_TD}">{_e(hd.name)}</td>'
+            f'<td style="{_TD_NOWRAP}">{_e(hd.market)}</td>'
+            f'<td style="{_TD_NUM}">{fmt_price(hd.buy_price)}</td>'
+            f'<td style="{_TD_NUM}">{hd.quantity:,}</td>'
+            f'<td style="{_TD_NUM}">{_amount(hd.buy_price, hd.quantity)}</td>'
+            f'<td style="{_TD}">{_e(_purchase_date_text(hd))}</td>'
+            f'<td style="{_TD_NUM}">{fmt_price(hd.current)}</td>'
+            f'<td style="{_TD_NUM}">{_amount(hd.current, hd.quantity)}</td>'
+            f'<td style="{_TD_NUM}{pnl_style}">{rate}</td>'
+            f'<td style="{_TD_NUM}{pnl_style}">{amount}</td>'
+            + _horizon_cells(hd.by_horizon)
+            + f'<td style="{_TD}{_judgment_style(hd.judgment)}">{_e(hd.judgment)}</td>'
+            + f'<td style="{_TD}">{_note_html(hd.notes)}</td></tr>'
+        )
+        if len(hd.lots) <= 1:
+            continue
+        for lot in hd.lots:
+            lrate, lamount, lstyle = _pnl_cells(lot.buy_price, hd.current, lot.quantity)
+            out.append(
+                f"<tr{stripe}>"
+                f'<td style="{_TD}"></td><td style="{_TD}">└</td><td style="{_TD}"></td>'
+                f'<td style="{_TD_NUM}">{fmt_price(lot.buy_price)}</td>'
+                f'<td style="{_TD_NUM}">{lot.quantity:,}</td>'
+                f'<td style="{_TD_NUM}">{_amount(lot.buy_price, lot.quantity)}</td>'
+                f'<td style="{_TD}">{lot.buy_date.isoformat()}</td>'
+                f'<td style="{_TD}"></td>'
+                f'<td style="{_TD_NUM}">{_amount(hd.current, lot.quantity)}</td>'
+                f'<td style="{_TD_NUM}{lstyle}">{lrate}</td>'
+                f'<td style="{_TD_NUM}{lstyle}">{lamount}</td>'
+                + blank_horizons
+                + f'<td style="{_TD}"></td><td style="{_TD}"></td></tr>'
+            )
     out.append("</table>")
     return out
 
@@ -778,35 +917,10 @@ def build_html(data: NotifyData, subject: str, is_backfill: bool) -> str:
     )
     out += _candidate_table(data.candidates_sector)
 
-    # 保有銘柄
+    # 保有銘柄(画面の保有中の表と同じ列。「操作」は除く)
     out.append(_SECTION.format(m="24px 0 6px", t="保有銘柄"))
     if data.holdings:
-        out.append(_TABLE)
-        out.append(
-            f"<tr{_HEAD_ROW}>"
-            + "".join(f'<th style="{_TH}">{h}</th>' for h in ("コード", "銘柄名", "市場", "買値", "現在値", "損益"))
-            + _horizon_headers()
-            + f'<th style="{_TH}">判定</th><th style="{_TH}">備考</th></tr>'
-        )
-        for i, hd in enumerate(data.holdings):
-            if hd.current is None or hd.buy_price == 0:
-                pnl, pnl_style = "-", ""
-            else:
-                change = (hd.current - hd.buy_price) / hd.buy_price
-                pnl = fmt_rate(change, sign=True)
-                pnl_style = f"color:{_RED};" if change > 0 else (f"color:{_BLUE};" if change < 0 else "")
-            out.append(
-                f"<tr{_STRIPE if i % 2 else ''}>"
-                f'<td style="{_TD}">{_e(display_code(hd.code))}</td><td style="{_TD}">{_e(hd.name)}</td>'
-                f'<td style="{_TD_NOWRAP}">{_e(hd.market)}</td>'
-                f'<td style="{_TD_NUM}">{fmt_price(hd.buy_price)}</td>'
-                f'<td style="{_TD_NUM}">{fmt_price(hd.current)}</td>'
-                f'<td style="{_TD_NUM}{pnl_style}">{pnl}</td>'
-                + _horizon_cells(hd.by_horizon)
-                + f'<td style="{_TD}{_judgment_style(hd.judgment)}">{_e(hd.judgment)}</td>'
-                + f'<td style="{_TD}">{_note_html(hd.notes)}</td></tr>'
-            )
-        out.append("</table>")
+        out += _holdings_html(data.holdings)
     else:
         out.append('<div style="font-size:13px;">保有銘柄はありません</div>')
 
@@ -948,16 +1062,28 @@ def build_text(data: NotifyData, is_backfill: bool) -> str:
     lines += ["", "■ 保有銘柄"]
     if not data.holdings:
         lines.append("保有銘柄はありません")
+    if data.holdings:
+        lines.append(holding_totals_text(data.holdings))
     for hd in data.holdings:
-        pnl = "-"
-        if hd.current is not None and hd.buy_price != 0:
-            pnl = fmt_rate((hd.current - hd.buy_price) / hd.buy_price, sign=True)
+        rate, amount, _ = _pnl_cells(hd.buy_price, hd.current, hd.quantity)
         lines.append(
             f"{display_code(hd.code)} {hd.name}{_market_text(hd.market)}"
-            f" / 買値 {fmt_price(hd.buy_price)} 現在値 {fmt_price(hd.current)} 損益 {pnl}"
+            f" / 買値 {fmt_price(hd.buy_price)} 買い株数 {hd.quantity:,}"
+            f" 買いの金額 {_amount(hd.buy_price, hd.quantity)}"
+            f" 購入日 {_purchase_date_text(hd)}"
+            f" 現在値 {fmt_price(hd.current)} 現在の金額 {_amount(hd.current, hd.quantity)}"
+            f" 損益 {rate}({amount}円)"
             f" / {probs(hd.by_horizon)} / 判定: {hd.judgment}"
             + (f" [{NOTE_SEPARATOR.join(hd.notes)}]" if hd.notes else "")
         )
+        if len(hd.lots) > 1:
+            for lot in hd.lots:
+                lrate, lamount, _ = _pnl_cells(lot.buy_price, hd.current, lot.quantity)
+                lines.append(
+                    f"└ 買値 {fmt_price(lot.buy_price)} 買い株数 {lot.quantity:,}"
+                    f" 買いの金額 {_amount(lot.buy_price, lot.quantity)} 購入日 {lot.buy_date.isoformat()}"
+                    f" 現在の金額 {_amount(hd.current, lot.quantity)} 損益 {lrate}({lamount}円)"
+                )
     lines += ["", "■ 的中率(検証結果。直近1か月 / 直近3か月 / 全期間)"]
     if not data.accuracy:
         lines.append("検証結果はまだありません")

@@ -102,7 +102,7 @@ def test_読み込みとHTML(data: psycopg.Connection[DictRow]) -> None:
     assert '市場の中央値 <span class="dn">-1.0%</span>' in page
     # 10日後と60日後はまとめも「-」
     assert page.count('<td colspan="7" class="dash">-</td>') == 6
-    assert '<span class="up">ストップ高</span>' in page and '<span style="color:#b35900;">流動性注意</span>' in page
+    assert '<span class="up">ストップ高</span>' in page and '<span style="color:#2e7d32;">流動性注意</span>' in page
     assert "33330" not in page
 
 
@@ -131,7 +131,7 @@ def test_備考の色() -> None:
     # 複数ある場合は「／」でつなぐ
     assert html == ('<span class="up">短期ゴールデンクロス発生(本日)</span>／'
                     '<span class="dn">中長期デッドクロス発生(3営業日前)</span>／'
-                    '<span style="color:#b35900;">流動性注意</span>／'
+                    '<span style="color:#2e7d32;">流動性注意</span>／'
                     '<span class="dn">赤字予想(業績注意)</span>')  # fmt: skip
 
 
@@ -139,7 +139,11 @@ def test_買い候補がない期間() -> None:
     assert "この期間の買い候補はありません。" in mk.build_html([], date(2026, 1, 1), date(2026, 1, 31))
 
 
-def test_mainはファイルを書き読み取り専用で動く(data: psycopg.Connection[DictRow], tmp_path: Path) -> None:
+def test_mainはファイルを書き読み取り専用で動く(
+    data: psycopg.Connection[DictRow], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 出力先を省略した呼び出しが、資料のフォルダにファイルを作らないようにする
+    monkeypatch.setattr(const, "CANDIDATES_HTML_DIR", str(tmp_path / "image"))
     out = tmp_path / "結果.html"
     assert mk.main(["--from", "2026-02-01", "--to", "2026-02-28", "--out", str(out)]) == 0
     assert "□□銀行" in out.read_text(encoding="utf-8")

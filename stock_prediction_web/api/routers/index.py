@@ -1,6 +1,6 @@
 """指数の API(トップ・買い候補の「相場」のブロック)。
 
-GET /api/index/prices: 日経平均の日足、移動平均、ボリンジャーバンド、トレンドライン(7章 No.19)
+GET /api/index/prices: 日経平均の日足、移動平均、ボリンジャーバンド、トレンドライン
 """
 
 from datetime import date

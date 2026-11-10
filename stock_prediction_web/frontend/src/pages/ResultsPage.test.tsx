@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { RESULTS } from "../test/apiData";
+import { PRED_DATES, RESULTS } from "../test/apiData";
 import { renderApp, urlsOf } from "../test/renderApp";
 
 describe("買い候補と実際の株価", () => {
@@ -83,6 +83,36 @@ describe("買い候補と実際の株価", () => {
     await user.click(screen.getByRole("tab", { name: "買い候補(業種分散)" }));
     expect(await screen.findByText("この期間の買い候補(業種分散)はありません。")).toBeInTheDocument();
     expect(urlsOf(calls, "/api/candidates/results").at(-1)).toBe("/api/candidates/results?kind=sector");
+  });
+
+  it.each(["期間(開始)", "期間(終了)"])(
+    "%s のカレンダーでは、予測がない日は選べず、予測がある日は選べる",
+    async (label) => {
+      const user = userEvent.setup();
+      renderApp("/candidates/results", (p) => {
+        // 開始日は 4月、終了日は 7月のカレンダーが開く
+        if (p === "/api/prediction-dates")
+          return { body: { dates: ["2026-04-17", "2026-04-21", ...PRED_DATES.dates] } };
+        return p === "/api/candidates/results" ? { body: RESULTS } : undefined;
+      });
+      await screen.findByRole("heading", { level: 2, name: /の買い候補/ });
+      await user.click(screen.getByRole("button", { name: `${label}をカレンダーで選ぶ` }));
+      const cal = screen.getByRole("dialog", { name: `${label}のカレンダー` });
+      expect(within(cal).getByText("20").closest("button")).toBeDisabled();
+      expect(within(cal).getByText("21").closest("button")).toBeEnabled();
+    },
+  );
+
+  it("予測日の一覧を読めなければ、カレンダーは全ての日を選べる", async () => {
+    const user = userEvent.setup();
+    renderApp("/candidates/results", (p) => {
+      if (p === "/api/prediction-dates") return { status: 500, body: { detail: "エラー" } };
+      return p === "/api/candidates/results" ? { body: RESULTS } : undefined;
+    });
+    await screen.findByRole("heading", { level: 2, name: /の買い候補/ });
+    await user.click(screen.getByRole("button", { name: "期間(開始)をカレンダーで選ぶ" }));
+    const cal = screen.getByRole("dialog", { name: "期間(開始)のカレンダー" });
+    expect(within(cal).getByText("20").closest("button")).toBeEnabled();
   });
 
   it("期間が長すぎるなどのエラーは、そのまま出す", async () => {
