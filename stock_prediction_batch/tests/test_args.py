@@ -1,4 +1,4 @@
-"""common/args.py のテスト(7.1 引数チェック)。"""
+"""common/args.py のテスト。"""
 
 from datetime import date
 

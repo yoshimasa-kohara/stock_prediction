@@ -62,8 +62,8 @@ describe("保有銘柄", () => {
     // 合計のカードは 買値の合計 → 売値の合計 → 損益の合計 の順
     const labels = Array.from(document.querySelectorAll(".card .lbl")).map((e) => e.textContent);
     expect(labels).toEqual(["買値の合計", "売値の合計", "売却した銘柄の損益の合計"]);
-    expect(screen.getByText("152,000")).toBeInTheDocument();
-    expect(screen.getByText("168,800")).toBeInTheDocument();
+    const cards = Array.from(document.querySelectorAll(".card .val")).map((e) => e.textContent);
+    expect(cards.slice(0, 2)).toEqual(["152,000", "168,800"]);
     expect(screen.getByText("+16,800(+11.1%)")).toBeInTheDocument();
     // 表の行の損益
     expect(screen.getByText("+16,800")).toBeInTheDocument();
@@ -278,5 +278,133 @@ describe("保有銘柄", () => {
     await user.type(dialog().getByRole("textbox", { name: "売値(1株)" }), "1200");
     await user.click(dialog().getByRole("button", { name: "売却を登録する" }));
     expect(await dialog().findByText("売却済みの行は変更できません")).toBeInTheDocument();
+  });
+
+  it("保有中の表の列の並びと、買いの金額・現在の金額(合計の行と購入ごとの行)", async () => {
+    const user = userEvent.setup();
+    renderApp("/holdings", handler());
+    await screen.findByText("判定の日: 2026-07-22(水)");
+    const heads = Array.from(document.querySelectorAll("thead tr:first-child th")).map((e) => e.textContent);
+    expect(heads.slice(0, 11)).toEqual([
+      "コード",
+      "銘柄名",
+      "市場",
+      "買値",
+      "買い株数",
+      "買いの金額",
+      "購入日",
+      "現在値",
+      "現在の金額",
+      "損益(%)",
+      "損益(円)",
+    ]);
+    expect(heads.slice(-3)).toEqual(["判定", "備考", "操作"]);
+    const rowCells = (name: string) =>
+      Array.from(screen.getByText(name).closest("tr")!.querySelectorAll("td")).map((e) => e.textContent);
+    // 合計の行(買い増し): 平均買値 × 合計の株数、現在値 × 合計の株数
+    const total = rowCells("サンプル工業B");
+    expect(total[5]).toBe("247,080");
+    expect(total[8]).toBe("237,200");
+    // 1回の購入
+    const single = rowCells("サンプル商事C");
+    expect(single[5]).toBe("749,670");
+    expect(single[8]).toBe("665,700");
+    // 購入ごとの行
+    await user.click(screen.getByRole("button", { name: "サンプル工業Bの購入ごとの行を開く" }));
+    const lot1 = rowCells("└ 1回目の購入");
+    expect([lot1[5], lot1[8]]).toEqual(["130,950", "118,600"]);
+    const lot2 = rowCells("└ 2回目の購入");
+    expect([lot2[5], lot2[8]]).toEqual(["116,130", "118,600"]);
+  });
+
+  it("現在値がない銘柄は、現在の金額を「-」にする", async () => {
+    const [first, second] = HOLDINGS.groups;
+    const noClose = {
+      ...HOLDINGS,
+      groups: [
+        {
+          ...second!,
+          current: null,
+          current_date: null,
+          value: null,
+          current_amount: null,
+          lots: second!.lots.map((l) => ({ ...l, current_amount: null })),
+        },
+        first!,
+      ],
+    };
+    renderApp("/holdings", (p) => (p === "/api/holdings" ? { body: noClose } : undefined));
+    await screen.findByText("判定の日: 2026-07-22(水)");
+    const cells = Array.from(screen.getByText("サンプル商事C").closest("tr")!.querySelectorAll("td")).map(
+      (e) => e.textContent,
+    );
+    expect(cells[5]).toBe("749,670");
+    expect(cells[7]).toBe("-");
+    expect(cells[8]).toBe("-");
+  });
+
+  it("売却済みの表の列の並びと、買いの金額・売りの金額", async () => {
+    const user = userEvent.setup();
+    renderApp("/holdings", handler());
+    await user.click(await screen.findByRole("tab", { name: "売却済み(1)" }));
+    const heads = Array.from(document.querySelectorAll("thead th")).map((e) => e.textContent);
+    expect(heads).toEqual([
+      "コード",
+      "銘柄名",
+      "市場",
+      "買値",
+      "買い株数",
+      "買いの金額",
+      "購入日",
+      "売値",
+      "売り株数",
+      "売りの金額",
+      "売却日",
+      "現在値",
+      "損益(%)",
+      "損益(円)",
+      "保有した日数",
+    ]);
+    const cells = Array.from(screen.getByText("サンプル物産B").closest("tr")!.querySelectorAll("td")).map(
+      (e) => e.textContent,
+    );
+    expect(cells[5]).toBe("152,000");
+    expect(cells[9]).toBe("168,800");
+    // 現在の金額の列は出さない
+    expect(heads).not.toContain("現在の金額");
+  });
+
+  it("判定と備考の色のクラス(売却は赤、注意・乗り換えは橙、判定なしは緑、「MM/DD の終値」は橙、流動性注意は緑)", async () => {
+    const [first, second] = HOLDINGS.groups;
+    const judgments = [
+      ["保持", ""],
+      ["保持(注意: 上昇予測だが下降しています)", "jo"],
+      ["保持(注意: 相場全体が下がる予測)", "jo"],
+      ["乗り換えを検討(上昇予測だが市場の中央値を下回る予測)", "jo"],
+      ["売却(下降予測、市場の中央値も下回る予測)", "jr"],
+      ["判定なし(本日の予測がありません)", "jg"],
+    ] as const;
+    const groups = judgments.map(([judgment], i) => ({
+      ...(i % 2 === 0 ? first! : second!),
+      code: `1${i}000`,
+      name: `銘柄${i}`,
+      judgment,
+      notes:
+        i === 0
+          ? [
+              { text: "11/05 の終値", color: "orange" },
+              { text: "流動性注意", color: "green" },
+            ]
+          : [],
+    }));
+    renderApp("/holdings", (p) => (p === "/api/holdings" ? { body: { ...HOLDINGS, groups } } : undefined));
+    await screen.findByText("判定の日: 2026-07-22(水)");
+    for (const [judgment, cls] of judgments) {
+      const el = screen.getByText(judgment);
+      if (cls) expect(el).toHaveClass(cls);
+      else expect(el.className).toBe("");
+    }
+    expect(screen.getByText("11/05 の終値")).toHaveClass("o");
+    expect(screen.getByText("流動性注意")).toHaveClass("g");
   });
 });

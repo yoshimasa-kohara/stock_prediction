@@ -1,4 +1,4 @@
-"""GET /api/runs: 実行履歴(7章 No.13)。
+"""GET /api/runs: 実行履歴。
 
 対象の日付の条件は、run_history の target_date(処理の対象の日付)で絞る(R1 の案A)。
 開始日時の新しい順に、web_const.RUNS_PAGE_SIZE(100)件ずつ返す。

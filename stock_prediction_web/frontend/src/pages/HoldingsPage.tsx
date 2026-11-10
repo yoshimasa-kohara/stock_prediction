@@ -65,7 +65,7 @@ function HoldingTable({
             <th rowSpan={2} className="fix">
               銘柄名
             </th>
-            {["市場", "買値", "買い株数", "購入日", "現在値", "損益(%)", "損益(円)"].map((h) => (
+            {["市場", "買値", "買い株数", "買いの金額", "購入日", "現在値", "現在の金額", "損益(%)", "損益(円)"].map((h) => (
               <th key={h} rowSpan={2}>
                 {h}
               </th>
@@ -124,8 +124,10 @@ function HoldingTable({
                     )}
                   </td>
                   <td className="n">{formatInteger(g.quantity)}</td>
+                  <td className="n">{formatInteger(g.buy_amount)}</td>
                   <td>{many ? `${g.lots.length}回に分けて購入` : g.lots[0]?.buy_date}</td>
                   <td className="n">{formatPrice(g.current)}</td>
+                  <td className="n">{formatInteger(g.current_amount)}</td>
                   <td className={`n ${signClass(g.pnl_rate)}`}>{formatSignedPercent(g.pnl_rate)}</td>
                   <td className={`n ${signClass(g.pnl_amount)}`}>{formatSignedNumber(g.pnl_amount)}</td>
                   {horizons.flatMap((h) => {
@@ -158,8 +160,10 @@ function HoldingTable({
                       <td />
                       <td className="n">{formatPrice(lot.buy_price)}</td>
                       <td className="n">{formatInteger(lot.quantity)}</td>
+                      <td className="n">{formatInteger(lot.buy_amount)}</td>
                       <td>{lot.buy_date}</td>
                       <td className="n">{formatPrice(g.current)}</td>
+                      <td className="n">{formatInteger(lot.current_amount)}</td>
                       <td className={`n ${signClass(lot.pnl_rate)}`}>{formatSignedPercent(lot.pnl_rate)}</td>
                       <td className={`n ${signClass(lot.pnl_amount)}`}>{formatSignedNumber(lot.pnl_amount)}</td>
                       <td colSpan={predCols + 2} className="dash">
@@ -188,9 +192,11 @@ function SoldTable({ data }: { data: HoldingsResponse }) {
             <th>市場</th>
             <th>買値</th>
             <th>買い株数</th>
+            <th>買いの金額</th>
             <th>購入日</th>
             <th className="act">売値</th>
             <th className="act">売り株数</th>
+            <th className="act">売りの金額</th>
             <th className="act">売却日</th>
             <th>現在値</th>
             <th>損益(%)</th>
@@ -201,7 +207,7 @@ function SoldTable({ data }: { data: HoldingsResponse }) {
         <tbody>
           {data.sold.length === 0 && (
             <tr>
-              <td colSpan={13} className="c">
+              <td colSpan={15} className="c">
                 売却済みの銘柄はありません
               </td>
             </tr>
@@ -215,9 +221,11 @@ function SoldTable({ data }: { data: HoldingsResponse }) {
               <td>{s.market}</td>
               <td className="n">{formatPrice(s.buy_price)}</td>
               <td className="n">{formatInteger(s.quantity)}</td>
+              <td className="n">{formatInteger(s.buy_amount)}</td>
               <td>{s.buy_date}</td>
               <td className="n">{formatPrice(s.sell_price)}</td>
               <td className="n">{formatInteger(s.quantity)}</td>
+              <td className="n">{formatInteger(s.sell_amount)}</td>
               <td>{s.sell_date}</td>
               <td className="n">{formatPrice(s.current)}</td>
               <td className={`n ${signClass(s.pnl_rate)}`}>{formatSignedPercent(s.pnl_rate)}</td>

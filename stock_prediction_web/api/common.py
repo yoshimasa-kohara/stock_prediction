@@ -19,7 +19,7 @@ MSG_NO_PREDICTION_AT_ALL: str = "予測がまだありません。バッチで�
 
 
 class Note(BaseModel):
-    """備考の1つ。color は画面の色(red: 赤、blue: 青、orange: 橙)。"""
+    """備考の1つ。color は画面の色(red: 赤、blue: 青、orange: 橙、green: 緑)。"""
 
     text: str
     color: str
@@ -45,7 +45,7 @@ def today() -> date:
 
 
 def latest_pred_date(conn: psycopg.Connection[DictRow]) -> date | None:
-    """予測がある最新の予測日(日付の初期値)。予測がなければ None。"""
+    """予測がある最新の予測日。予測がなければ None。"""
     row = conn.execute("SELECT max(pred_date) AS d FROM prediction").fetchone()
     return None if row is None else row["d"]
 

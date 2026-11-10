@@ -1,0 +1,17 @@
+# 改行コードの決まり(core.autocrlf の設定より優先される)
+# テキストのファイルは、リポジトリの中も、取り出したファイルも LF にする
+* text=auto eol=lf
+
+# .bat は CRLF でないと正しく動かないことがあるので CRLF にする
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 変換しないファイル
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.xlsx binary

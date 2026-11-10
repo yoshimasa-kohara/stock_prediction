@@ -208,14 +208,20 @@ def _params(target_date: date) -> dict[str, object]:
 
 
 def rebuild_daily_summary(cur: psycopg.Cursor[DictRow], pred_date: date, horizon: int) -> int:
-    """予測日・予測日数の組の、予測日ごとの集計を作り直す。作った行数を返す。"""
+    """予測日・予測日数の組の、予測日ごとの集計を作り直す。作った行数を返す。
+
+    案aで、既存の集計を作り直す tools/rebuild_verify_summary.py からも使う。
+    """
     cur.execute("DELETE FROM verify_daily_summary WHERE pred_date = %s AND horizon = %s", (pred_date, horizon))
     cur.execute(_DAILY_SUMMARY_SQL, {**_params(pred_date), "pred_date": pred_date, "horizon": horizon})
     return cur.rowcount
 
 
 def rebuild_period_summary(cur: psycopg.Cursor[DictRow], summary_date: date) -> int:
-    """集計の基準日の、期間の集計(1M・3M・ALL)を作り直す。作った行数を返す。"""
+    """集計の基準日の、期間の集計(1M・3M・ALL)を作り直す。作った行数を返す。
+
+    tools/rebuild_verify_summary.py からも使う。
+    """
     cur.execute("DELETE FROM verify_period_summary WHERE summary_date = %s", (summary_date,))
     rows = 0
     for period in const.VERIFY_SUMMARY_PERIODS:

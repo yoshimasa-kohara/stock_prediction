@@ -3,8 +3,8 @@ import { Fragment } from "react";
 
 import type { Note } from "../api/types";
 
-/** 備考の色のクラス(styles.css の .r・.bl・.o) */
-const COLOR_CLASS: Record<string, string> = { red: "r", blue: "bl", orange: "o" };
+/** 備考の色のクラス(styles.css の .r・.bl・.o・.g) */
+const COLOR_CLASS: Record<string, string> = { red: "r", blue: "bl", orange: "o", green: "g" };
 
 /** 備考の区切り(全角のスラッシュ。メールと同じ) */
 export const NOTE_SEPARATOR = "／";

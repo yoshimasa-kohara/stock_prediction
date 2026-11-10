@@ -1,4 +1,4 @@
-// 上のメニューの画面(5章 No.1。銘柄詳細はメニューに出さない)
+// 上のメニューの画面(銘柄詳細はメニューに出さない)
 
 export interface MenuItem {
   path: string;

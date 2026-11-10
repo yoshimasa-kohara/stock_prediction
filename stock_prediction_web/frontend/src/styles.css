@@ -2,6 +2,10 @@
    スマホの幅(700px)は CSS の @media にしか書けないので、ここに書く(api/web_const.py には置かない) */
 
 /* ---- 画面見本と同じ部分 ---- */
+/* 判定・備考の色(メールの core/notify_core.py の COLOR_CAUTION・COLOR_QUIET と同じ。ここ1か所で決める) */
+:root{--color-caution:#f57c00;--color-quiet:#2e7d32;}
+/* 見出しへスクロールしたとき、固定のヘッダーに隠れないための余白(1か所で決める) */
+:root{--scroll-margin-top:60px;}
 *{box-sizing:border-box;}
 body{font-family:Meiryo,"Yu Gothic","Noto Sans CJK JP",sans-serif;margin:0;color:#222;background:#f3f5f8;font-size:14px;}
 a{color:#0055cc;text-decoration:none;} a:hover{text-decoration:underline;}
@@ -48,8 +52,8 @@ th{background:#dce6f1;font-weight:bold;} th.main{background:#d9ead3;} th.act{bac
 td.n{text-align:right;} td.c{text-align:center;} td.b{font-weight:bold;}
 tbody tr:nth-child(even) td{background:#f6f6f6;}
 .up{color:#c00000;font-weight:bold;} .dn{color:#0055cc;font-weight:bold;} .eq{color:#666;font-weight:bold;}
-.r{color:#c00000;} .bl{color:#0055cc;} .o{color:#b35900;}
-.jr{color:#c00000;font-weight:bold;} .jo{color:#b35900;font-weight:bold;}
+.r{color:#c00000;} .bl{color:#0055cc;} .o{color:var(--color-caution);} .g{color:var(--color-quiet);}
+.jr{color:#c00000;font-weight:bold;} .jo{color:var(--color-caution);font-weight:bold;} .jg{color:var(--color-quiet);}
 tfoot td{background:#fff8dc;font-weight:bold;}
 .fix{position:sticky;left:0;z-index:1;background:#fff;} th.fix{background:#dce6f1;} tfoot td.fix{background:#fff8dc;}
 tbody tr:nth-child(even) td.fix{background:#f6f6f6;}
@@ -85,7 +89,7 @@ tr.hl td{background:#fde2e2 !important;}
 /* ---- 画面にするときに足した部分(順番1(共通の土台)) ---- */
 header a.logo{color:#fff;text-decoration:none;}
 /* 目次などで見出しに移ったとき、上のメニュー(高さ 48px)の下に見出しが出るように、上に余白をとる */
-h1[id],h2[id]{scroll-margin-top:60px;}
+h1[id],h2[id],#candidates-top{scroll-margin-top:var(--scroll-margin-top);}
 header button.menu{background:none;border:none;color:#fff;padding:4px 8px;}
 .errbox{background:#fde2e2;border:1px solid #c00000;color:#c00000;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:13px;font-weight:bold;}
 .loading{color:#666;}

@@ -24,7 +24,7 @@ describe("Header(上のメニュー)", () => {
 
   it.each([
     ["/", "トップ"],
-    ["/candidates?date=2026-07-22", "買い候補"],
+    ["/candidates?from=2026-07-22&to=2026-07-22", "買い候補"],
     ["/candidates/results", "買い候補と実際の株価"],
     ["/search", "銘柄の検索"],
     ["/holdings", "保有銘柄"],

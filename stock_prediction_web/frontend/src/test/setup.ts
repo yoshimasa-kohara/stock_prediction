@@ -16,3 +16,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+
+// jsdom には scrollIntoView がないので、何もしない関数を置く(買い候補の自動スクロール用。テストごとにモックで置き換えてよい)
+Element.prototype.scrollIntoView = () => {};

@@ -263,3 +263,43 @@ def test_sell_twice(client: TestClient, sample: psycopg.Connection[DictRow]) -> 
         f"/api/holdings/{holding_id}/sell", json={"sell_date": "2026-07-23", "quantity": 100, "sell_price": 1200}
     )
     assert res.json() == {"detail": "売却済みの行は変更できません"}
+
+
+def test_holdings_amounts(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """保有中の金額: 1回の購入、買い増しの合計の行と購入ごとの行(買いの金額・現在の金額)。"""
+    add_holding(sample, "11110", "1000", 100, date(2026, 6, 1))
+    add_holding(sample, "11110", "1300", 100, date(2026, 6, 29))
+    add_holding(sample, "11120", "5000", 200, date(2026, 6, 15))
+    groups = {g["code"]: g for g in client.get("/api/holdings").json()["groups"]}
+    current = close_of(sample, "11110")
+    many = groups["11110"]
+    # 合計の行: 平均買値 × 合計の株数、現在値 × 合計の株数
+    assert many["buy_amount"] == pytest.approx(1150 * 200)
+    assert many["current_amount"] == pytest.approx(current * 200)
+    # 購入ごとの行: 買値 × 買い株数、現在値 × 買い株数
+    assert [lot["buy_amount"] for lot in many["lots"]] == [100000, 130000]
+    assert [lot["current_amount"] for lot in many["lots"]] == [pytest.approx(current * 100)] * 2
+    # 1回の購入
+    single = groups["11120"]
+    assert single["buy_amount"] == 1000000
+    assert single["current_amount"] == pytest.approx(close_of(sample, "11120") * 200)
+    assert single["lots"][0]["buy_amount"] == 1000000
+
+
+def test_holdings_amounts_no_close(client: TestClient, conn: psycopg.Connection[DictRow]) -> None:
+    """現在値がない(一度も終値がない)銘柄は、現在の金額を None(画面では「-」)にする。買いの金額は出す。"""
+    conn.execute("INSERT INTO stock_master (code, name, applied_date) VALUES ('11110', 'A', '2026-07-22')")
+    add_holding(conn, "11110", "1000", 100, date(2026, 7, 1))
+    g = client.get("/api/holdings").json()["groups"][0]
+    assert g["current"] is None and g["current_amount"] is None
+    assert g["buy_amount"] == 100000
+    assert g["lots"][0]["buy_amount"] == 100000 and g["lots"][0]["current_amount"] is None
+
+
+def test_holdings_sold_amounts(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """売却済みの金額: 買いの金額 = 買値 × 売り株数、売りの金額 = 売値 × 売り株数(売値が NULL の行は買値で数える)。"""
+    add_holding(sample, "11130", "2000", 100, date(2026, 4, 14), date(2026, 6, 12), "2200")
+    add_holding(sample, "11120", "500", 200, date(2026, 4, 1), date(2026, 5, 1), None)
+    sold = {s["code"]: s for s in client.get("/api/holdings").json()["sold"]}
+    assert (sold["11130"]["buy_amount"], sold["11130"]["sell_amount"]) == (200000, 220000)
+    assert (sold["11120"]["buy_amount"], sold["11120"]["sell_amount"]) == (100000, 100000)

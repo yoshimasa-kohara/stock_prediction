@@ -7,8 +7,10 @@ stock_prediction_batch/models/*
 stock_prediction_batch/logs/*
 !stock_prediction_batch/logs/.gitkeep
 
-# 秘密情報(API キー、メール、DB の接続先)を書く設定ファイル(見本の .env.example は登録する)
+# 秘密情報(API キー、メール、DB の接続先)を書く設定ファイルは登録しない。見本の .env.example だけ登録する
 .env
+.env.*
+!.env.example
 
 # 仮想環境を無視
 stock_prediction_batch/.venv/

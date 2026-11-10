@@ -31,7 +31,14 @@ from common.env import resolve_path
 from common.logger import get_logger
 from common.stock_code import display_code
 from core.features import cross_days_on, trendline_notes_on
-from core.notify_core import NOTE_LOW_LIQUIDITY, NOTE_SEPARATOR, cross_notes, is_blue_note, valuation_notes_on
+from core.notify_core import (
+    COLOR_QUIET,
+    NOTE_LOW_LIQUIDITY,
+    NOTE_SEPARATOR,
+    cross_notes,
+    is_blue_note,
+    valuation_notes_on,
+)
 
 LABEL: str = "画面のHTML"
 _WEEKDAYS: str = "月火水木金土日"
@@ -264,7 +271,7 @@ def _note_html(notes: list[str]) -> str:
     parts = []
     for n in notes:
         style = (
-            ' style="color:#b35900;"'
+            f' style="color:{COLOR_QUIET};"'
             if n == NOTE_LOW_LIQUIDITY
             else ' class="dn"'
             if is_blue_note(n)

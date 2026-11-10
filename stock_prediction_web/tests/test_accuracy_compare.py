@@ -1,4 +1,4 @@
-"""精度の比較の API(/api/accuracy/compare 6.9)のテスト。"""
+"""精度の比較の API(/api/accuracy/compare)のテスト。"""
 
 from decimal import Decimal
 

@@ -54,6 +54,8 @@ describe("書式(全画面で追加したもの)", () => {
     expect(judgmentClass("保持(注意: 上昇予測だが下降しています)")).toBe("jo");
     expect(judgmentClass("乗り換えを検討")).toBe("jo");
     expect(judgmentClass("保持")).toBe("");
+    expect(judgmentClass("保持(注意: 相場全体が下がる予測)")).toBe("jo");
+    expect(judgmentClass("判定なし(本日の予測がありません)")).toBe("jg");
     expect(statusBadgeClass("SUCCESS")).toBe("badge b-ok");
     expect(statusBadgeClass("RUNNING")).toBe("badge b-run");
     expect(statusBadgeClass("EMPTY")).toBe("badge b-empty");

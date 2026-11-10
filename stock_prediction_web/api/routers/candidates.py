@@ -1,5 +1,6 @@
-"""GET /api/candidates: 指定日の買い候補(7章 No.2)。
-GET /api/candidates/results: 期間の買い候補と実際の株価(7章 No.3)。
+"""GET /api/candidates: 指定日の買い候補。
+GET /api/candidates/range: 予測日の期間の買い候補。
+GET /api/candidates/results: 期間の買い候補と実際の株価。
 
 どちらもメールと同じ内容にするため、バッチのコード(core/notify_core.py の load_notify_data、
 tools/make_candidates_html.py の load_days)をそのまま使う。
@@ -14,12 +15,22 @@ from pydantic import BaseModel
 
 import const
 from api import web_const
-from api.common import HorizonValue, Note, check_range, horizon_values, latest_pred_date, resolve_pred_date, to_float
+from api.common import (
+    HorizonValue,
+    Note,
+    check_range,
+    horizon_values,
+    latest_pred_date,
+    resolve_pred_date,
+    to_float,
+    today,
+)
 from api.deps import Conn
 from api.errors import ApiError
 from api.logger import log_api
 from api.notes import to_notes
-from common.business_day import months_before
+from api.routers.status import list_prediction_dates
+from common.business_day import business_days_before, months_before
 from core.notify_core import candidate_fallback_note, load_notify_data
 from tools.make_candidates_html import KINDS, load_days
 
@@ -90,7 +101,33 @@ def get_candidates(
 ) -> CandidatesResponse:
     """指定日(省略すると最新の予測日)の買い候補(kind が sector なら買い候補(業種分散))を、メールと同じ並びで返す。"""
     check_kind(kind)
-    pred_date = resolve_pred_date(conn, target)
+    return build_candidates(conn, resolve_pred_date(conn, target), kind)
+
+
+@router.get("/api/candidates/range", response_model=list[CandidatesResponse])
+@log_api
+def get_candidates_range(
+    conn: Conn,
+    date_from: Annotated[date | None, Query(alias="from")] = None,
+    date_to: Annotated[date | None, Query(alias="to")] = None,
+    kind: str = const.CANDIDATE_KIND_TOP,
+) -> list[CandidatesResponse]:
+    """予測日の期間の買い候補を、予測がある日ごとに、/api/candidates と同じ中身で返す(古い日が先)。
+
+    from・to は必須。期間は web_const.CANDIDATES_RANGE_MAX_MONTHS か月以内。予測がない日は含めず、
+    1日もなければ空の配列を返す。
+    """
+    check_kind(kind)
+    if date_from is None or date_to is None:
+        raise ApiError(400, "from と to を指定してください")
+    check_range(date_from, date_to)
+    if date_from < months_before(date_to, web_const.CANDIDATES_RANGE_MAX_MONTHS):
+        raise ApiError(400, f"期間は{web_const.CANDIDATES_RANGE_MAX_MONTHS}か月以内にしてください")
+    return [build_candidates(conn, d, kind) for d in list_prediction_dates(conn, date_from, date_to)]
+
+
+def build_candidates(conn: Conn, pred_date: date, kind: str) -> CandidatesResponse:
+    """予測日1日分の買い候補(/api/candidates と /api/candidates/range が共通で使う)。"""
     data = load_notify_data(conn, pred_date)
     candidates = data.candidates_sector if kind == const.CANDIDATE_KIND_SECTOR else data.candidates
     return CandidatesResponse(
@@ -181,6 +218,15 @@ class ResultsResponse(BaseModel):
     days: list[ResultDay]
 
 
+def default_results_end(conn: Conn) -> date:
+    """終了日の初期値: 最新の株価の日の RESULTS_DEFAULT_END_OFFSET_DAYS 営業日前(株価がなければ最新の予測日か今日)。"""
+    row = conn.execute("SELECT max(trade_date) AS d FROM daily_price").fetchone()
+    latest: date | None = None if row is None else row["d"]
+    if latest is None:
+        return latest_pred_date(conn) or today()
+    return business_days_before(latest, web_const.RESULTS_DEFAULT_END_OFFSET_DAYS, conn)
+
+
 @router.get("/api/candidates/results", response_model=ResultsResponse)
 @log_api
 def get_candidate_results(
@@ -192,12 +238,13 @@ def get_candidate_results(
     """期間の予測日ごとの買い候補(kind が sector なら買い候補(業種分散))と実際の株価
     (画面フォーマット_買い候補と実際の株価.md の表の元)。
 
-    省略した場合は、最新の予測日の web_const.RESULTS_DEFAULT_MONTHS か月前〜最新の予測日。
+    省略した場合は、終了日 = 最新の株価の日の web_const.RESULTS_DEFAULT_END_OFFSET_DAYS 営業日前、
+    開始日 = 終了日の web_const.RESULTS_DEFAULT_SPAN_DAYS 営業日前(営業日は株価がある日で数える)。
     期間は web_const.RESULTS_MAX_MONTHS か月以内。
     """
     check_kind(kind)
-    end = date_to or latest_pred_date(conn) or date.today()
-    start = date_from or months_before(end, web_const.RESULTS_DEFAULT_MONTHS)
+    end = date_to or default_results_end(conn)
+    start = date_from or business_days_before(end, web_const.RESULTS_DEFAULT_SPAN_DAYS, conn)
     check_range(start, end)
     if start < months_before(end, web_const.RESULTS_MAX_MONTHS):
         raise ApiError(400, f"期間は{web_const.RESULTS_MAX_MONTHS}か月以内にしてください")
