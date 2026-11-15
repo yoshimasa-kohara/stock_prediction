@@ -1,4 +1,4 @@
-// 銘柄の検索。条件に合う銘柄を、買い候補と同じ形の表で見る。
+// 銘柄検索。条件に合う銘柄を、買い候補と同じ形の表で見る。
 // 21位以下の銘柄にも、メールと同じ条件で備考を出す。条件は URL に入れる(戻るボタンで前の検索に戻れる)
 import { useState } from "react";
 import { useSearchParams } from "react-router";
@@ -12,6 +12,7 @@ import PredDatePicker from "../components/PredDatePicker";
 import PredictionTable from "../components/PredictionTable";
 import { useSettings } from "../context/contexts";
 import { formatInteger } from "../lib/format";
+import { usePageTitle } from "../lib/usePageTitle";
 
 /** URL のクエリの名前(API と同じ) */
 const KEYS = ["date", "q", "markets", "sectors", "min_rel", "min_up", "min_ret", "notes", "exclude", "sort", "order"];
@@ -47,6 +48,7 @@ function formFromParams(params: URLSearchParams): Form {
 }
 
 export default function SearchPage() {
+  usePageTitle("銘柄検索");
   const settings = useSettings();
   const main = settings.batch.main_horizon;
   const [params, setParams] = useSearchParams();
@@ -124,7 +126,7 @@ export default function SearchPage() {
 
   return (
     <>
-      <h1>銘柄の検索</h1>
+      <h1>銘柄検索</h1>
       <div className="panel">
         <h2>検索条件</h2>
         <div className="form wide">
@@ -231,11 +233,12 @@ export default function SearchPage() {
             rankLabel="買い候補の順位"
             emptyMessage="条件に合う銘柄はありません"
             sort={{ key: data.sort, order: data.order === "asc" ? "asc" : "desc", onSort }}
+            showWatch
           />
           <p className="info">
             「買い候補の順位」は、その予測日の買い候補(上位{settings.batch.buy_candidate_count}
             銘柄)に入っている銘柄だけに出す。備考は{settings.batch.buy_candidate_count + 1}
-            位以下の銘柄にも、メールと同じ条件で出す。
+            位以下の銘柄にも、メールと同じ条件で出す。銘柄名の左の「☆」で検討中銘柄に追加する(追加済みは「★」)。
           </p>
           {moreError && <ErrorMessage message={moreError} />}
           {hasMore && (

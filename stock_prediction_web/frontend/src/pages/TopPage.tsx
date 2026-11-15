@@ -20,6 +20,7 @@ import {
   signClass,
 } from "../lib/format";
 import { judgmentClass, statusTextClass } from "../lib/labels";
+import { usePageTitle } from "../lib/usePageTitle";
 
 function BatchCard({ title, run }: { title: string; run: LatestRun | null }) {
   const settings = useSettings();
@@ -42,6 +43,7 @@ function BatchCard({ title, run }: { title: string; run: LatestRun | null }) {
 }
 
 export default function TopPage() {
+  usePageTitle("トップ");
   const settings = useSettings();
   const { status } = useStatus();
   const main = settings.batch.main_horizon;
@@ -68,8 +70,6 @@ export default function TopPage() {
             </div>
           )}
         </div>
-        <BatchCard title="日次バッチ" run={status?.latest_daily ?? null} />
-        <BatchCard title="週次バッチ" run={status?.latest_weekly ?? null} />
         <div className="card">
           <div className="lbl">買い候補 / 保有銘柄</div>
           <div className="val">
@@ -79,6 +79,8 @@ export default function TopPage() {
             売却の判定 {sellCount}件、乗り換えを検討 {switchCount}件
           </div>
         </div>
+        <BatchCard title="日次バッチ" run={status?.latest_daily ?? null} />
+        <BatchCard title="週次バッチ" run={status?.latest_weekly ?? null} />
       </div>
       {warnings.length > 0 && (
         <div className="warn" style={{ marginTop: 14 }}>
@@ -95,7 +97,10 @@ export default function TopPage() {
       {candidates.data && <MarketBlock predDate={candidates.data.pred_date} state={candidates.data.market_state} />}
       <div className="two">
         <div className="panel">
-          <h2>買い候補(上位{settings.web.top_candidate_count}銘柄)</h2>
+          <h2>
+            買い候補(上位{settings.web.top_candidate_count}銘柄
+            {candidates.data?.pred_date ? `。予測日 ${candidates.data.pred_date}` : ""})
+          </h2>
           {candidates.error && <ErrorMessage message={candidates.error} />}
           {candidates.data && (
             <PredictionTable rows={top} horizons={[main]} mainHorizon={main} emptyMessage="買い候補はありません" />

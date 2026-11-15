@@ -59,6 +59,7 @@ TABLES: list[str] = [
     "earnings_date",
     "verify_calibration_summary",
     "index_daily_price",
+    "watch_stock",
 ]
 
 

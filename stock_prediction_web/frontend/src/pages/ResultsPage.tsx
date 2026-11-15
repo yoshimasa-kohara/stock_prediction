@@ -10,6 +10,7 @@ import ErrorMessage from "../components/ErrorMessage";
 import NotesText from "../components/NotesText";
 import StockName from "../components/StockName";
 import Tabs from "../components/Tabs";
+import WatchStockButton from "../components/WatchStockButton";
 import { useSettings } from "../context/contexts";
 import { KIND_TABS, kindDescription, kindLabel, kindParam, parseKind } from "../lib/candidateKind";
 import {
@@ -22,6 +23,7 @@ import {
   formatSignedPercent,
   signClass,
 } from "../lib/format";
+import { usePageTitle } from "../lib/usePageTitle";
 
 /** 上がった・同じ・下がったの矢印 */
 function arrow(value: number): string {
@@ -42,7 +44,7 @@ function DayTable({ day, horizons, main }: { day: ResultDay; horizons: number[];
               銘柄名
             </th>
             <th rowSpan={2}>市場</th>
-            <th rowSpan={2}>現在値</th>
+            <th rowSpan={2}>予測日の株価</th>
             {horizons.map((h) => {
               const t = targetOf(h);
               return (
@@ -66,12 +68,12 @@ function DayTable({ day, horizons, main }: { day: ResultDay; horizons: number[];
               <th key={`${h}-d`} className="act">
                 差額
                 <br />
-                (実際の株価−現在値)
+                (実際の株価−予測日の株価)
               </th>,
               <th key={`${h}-r`} className="act">
                 値上がり率
                 <br />
-                (差額÷現在値)
+                (差額÷予測日の株価)
               </th>,
               <th key={`${h}-u`} className="act">
                 上昇
@@ -87,6 +89,7 @@ function DayTable({ day, horizons, main }: { day: ResultDay; horizons: number[];
               <td className="n">{r.rank}</td>
               <td>{displayCode(r.code)}</td>
               <td className="fix">
+                <WatchStockButton code={r.code} name={r.name} />
                 <StockName code={r.code} name={r.name} />
               </td>
               <td>{r.market}</td>
@@ -224,6 +227,7 @@ function Summary({ day, horizons }: { day: ResultDay; horizons: number[] }) {
 }
 
 export default function ResultsPage() {
+  usePageTitle("買い候補と実際の株価");
   const settings = useSettings();
   const [params, setParams] = useSearchParams();
   const kind = parseKind(params.get("kind"));
@@ -285,9 +289,9 @@ export default function ResultsPage() {
         予測日ごとの{label}({kindDescription(kind, settings.batch)}。メールと同じ内容)に、{horizons.join("・")}
         営業日後の実際の株価を並べたもの。主となる日数: {main}営業日後(緑の見出し)
         <br />
-        実際の株価・差額・値上がり率・上昇: <span className="up">赤字 = 現在値より上がった</span>、
+        実際の株価・差額・値上がり率・上昇: <span className="up">赤字 = 予測日の株価より上がった</span>、
         <span className="dn">青字 = 下がった</span>、<span className="eq">灰色 = 同じ(→)</span>
-        。答え合わせの日が来ていない日数は「-」。予測のない日(土日・祝日など)は表がありません
+        。答え合わせの日が来ていない日数は「-」。予測のない日(土日・祝日など)は表がありません。銘柄名の左の「☆」で検討中銘柄に追加する(追加済みは「★」)
       </p>
       {res.error && <ErrorMessage message={res.error} />}
       {res.loading && <p className="loading">読み込み中…</p>}

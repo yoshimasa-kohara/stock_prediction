@@ -30,6 +30,16 @@ class WebSettings(BaseModel):
     runs_default_days: int
     runs_page_size: int
     screen_page_size: int
+    watch_stock_memo_max_length: int
+    accuracy_periods: list[str]
+    accuracy_breakdown_default_period: str
+    accuracy_stock_min_count_all: int
+    accuracy_stock_min_count_top: int
+    accuracy_stock_page_size: int
+    accuracy_directions: dict[str, str]
+    accuracy_direction_default: str
+    ranking_page_size: int
+    ranking_regular_days: int
     run_status_labels: dict[str, str]
     batch_type_labels: dict[str, str]
 
@@ -76,6 +86,16 @@ def build_settings() -> SettingsResponse:
             runs_default_days=web_const.RUNS_DEFAULT_DAYS,
             runs_page_size=web_const.RUNS_PAGE_SIZE,
             screen_page_size=web_const.SCREEN_PAGE_SIZE,
+            watch_stock_memo_max_length=web_const.WATCH_STOCK_MEMO_MAX_LENGTH,
+            accuracy_periods=list(web_const.ACCURACY_RANK_PERIODS),
+            accuracy_breakdown_default_period=web_const.ACCURACY_BREAKDOWN_DEFAULT_PERIOD,
+            accuracy_stock_min_count_all=web_const.ACCURACY_STOCK_MIN_COUNT_ALL,
+            accuracy_stock_min_count_top=web_const.ACCURACY_STOCK_MIN_COUNT_TOP,
+            accuracy_stock_page_size=web_const.ACCURACY_STOCK_PAGE_SIZE,
+            accuracy_directions=dict(web_const.ACCURACY_DIRECTIONS),
+            accuracy_direction_default=web_const.ACCURACY_DIRECTION_DEFAULT,
+            ranking_page_size=web_const.RANKING_PAGE_SIZE,
+            ranking_regular_days=web_const.RANKING_REGULAR_DAYS,
             run_status_labels=dict(web_const.RUN_STATUS_LABELS),
             batch_type_labels=dict(web_const.BATCH_TYPE_LABELS),
         ),

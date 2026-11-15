@@ -283,7 +283,7 @@ def _note_html(notes: list[str]) -> str:
 
 def _thead(day: Day) -> str:
     first = ['<th rowspan="2">順位</th>', '<th rowspan="2">コード</th>', '<th rowspan="2" class="fix">銘柄名</th>',
-             '<th rowspan="2">市場</th>', '<th rowspan="2">現在値</th>']  # fmt: skip
+             '<th rowspan="2">市場</th>', '<th rowspan="2">予測日の株価</th>']  # fmt: skip
     second: list[str] = []
     for h in const.PREDICT_HORIZONS:
         target = next((r.cells[h].target_date for r in day.rows if h in r.cells), None)
@@ -292,8 +292,8 @@ def _thead(day: Day) -> str:
         first.append(f'<th colspan="7"{main}>{h}日後{when}</th>')
         second += [f"<th{main}>{n}</th>" for n in ("市場比", "上昇確率", "予測株価")]
         second += [
-            '<th class="act">実際の株価</th>', '<th class="act">差額<br>(実際の株価−現在値)</th>',
-            '<th class="act">値上がり率<br>(差額÷現在値)</th>', '<th class="act">上昇<br>(↑/→/↓)</th>',
+            '<th class="act">実際の株価</th>', '<th class="act">差額<br>(実際の株価−予測日の株価)</th>',
+            '<th class="act">値上がり率<br>(差額÷予測日の株価)</th>', '<th class="act">上昇<br>(↑/→/↓)</th>',
         ]  # fmt: skip
     first.append('<th rowspan="2">備考</th>')
     return f"<thead><tr>{''.join(first)}</tr><tr>{''.join(second)}</tr></thead>"
@@ -377,7 +377,7 @@ def build_html(days: list[Day], date_from: date, date_to: date, kind: str = cons
         f"予測日ごとの{kind_description(kind)}に、{horizons}営業日後の実際の株価を並べたもの。"
         f"主となる日数: {const.MAIN_HORIZON}営業日後(緑の見出し)。"
         "上昇確率は補正した値(補正の仕組みを入れる前のモデルの予測は補正前の値)<br>"
-        '実際の株価・差額・値上がり率・上昇: <span class="up">赤字 = 現在値より上がった</span>、'
+        '実際の株価・差額・値上がり率・上昇: <span class="up">赤字 = 予測日の株価より上がった</span>、'
         '<span class="dn">青字 = 下がった</span>、<span class="eq">灰色 = 同じ(→)</span>。'
         "答え合わせの日が来ていない日数は「-」。予測のない日(土日・祝日など)は表がありません"
     )

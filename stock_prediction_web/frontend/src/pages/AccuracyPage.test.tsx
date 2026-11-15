@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { type ReactElement, cloneElement } from "react";
 import { vi } from "vitest";
 
-import { ACCURACY, ACCURACY_EMPTY, DAILY, RANK } from "../test/apiData";
+import { ACCURACY, ACCURACY_EMPTY, DAILY, RANK, SECTOR_ACCURACY, STOCK_ACCURACY } from "../test/apiData";
 import { type Handler, renderPage, urlsOf } from "../test/renderApp";
 import AccuracyPage from "./AccuracyPage";
 
@@ -22,6 +22,8 @@ function handler(p: string, q: URLSearchParams) {
   if (p === "/api/accuracy") return { body: { ...ACCURACY, horizon: Number(q.get("horizon")) } };
   if (p === "/api/accuracy/daily") return { body: DAILY };
   if (p === "/api/accuracy/rank") return { body: RANK };
+  if (p === "/api/accuracy/stocks") return { body: STOCK_ACCURACY };
+  if (p === "/api/accuracy/sectors") return { body: SECTOR_ACCURACY };
   return undefined;
 }
 
@@ -220,6 +222,48 @@ describe("的中率", () => {
       p === "/api/accuracy" ? { status: 400, body: { detail: "予測日数は 5・10・20・60 のどれかを指定してください" } } : undefined,
     );
     expect(await screen.findByRole("alert")).toHaveTextContent("予測日数は 5・10・20・60 のどれかを指定してください");
+  });
+
+  it("銘柄別・業種別の的中率を、上昇確率の確かさと順位別の的中率の間に出す。予測日数・基準日を渡す", async () => {
+    const user = userEvent.setup();
+    const calls = renderAt("/accuracy", handler);
+    await screen.findByRole("table", { name: "銘柄別の的中率" });
+    await screen.findByRole("table", { name: "業種別の的中率" });
+    await screen.findByRole("table", { name: "買い候補 順位別 的中率" });
+    const titles = Array.from(document.querySelectorAll(".panel h2")).map((x) => x.textContent);
+    expect(titles.slice(-4)).toEqual([
+      "上昇確率の確かさ(20日後、直近3か月)",
+      "銘柄別の的中率(20日後、直近3か月)",
+      "業種別の的中率(20日後、直近3か月)",
+      "買い候補 順位別 的中率",
+    ]);
+    expect(urlsOf(calls, "/api/accuracy/stocks")).toEqual([
+      "/api/accuracy/stocks?horizon=20&period=3M&segment=all&direction=up&sort=beat_rate&order=desc",
+    ]);
+    expect(urlsOf(calls, "/api/accuracy/sectors")).toEqual(["/api/accuracy/sectors?horizon=20&period=3M&direction=up"]);
+    // 期間のタブは表ごとに別に持つ(銘柄別を全期間にしても、業種別は読み直さない)
+    await user.click(within(screen.getByRole("tablist", { name: "銘柄別の的中率の期間" })).getByRole("tab", { name: "全期間" }));
+    await waitFor(() => expect(urlsOf(calls, "/api/accuracy/stocks").at(-1)).toContain("period=ALL"));
+    expect(urlsOf(calls, "/api/accuracy/sectors")).toHaveLength(1);
+    // 予測日数・基準日を変えると、その条件で読み直す(選んだ期間はそのまま)
+    await user.click(screen.getByRole("tab", { name: "5日後" }));
+    await waitFor(() => expect(urlsOf(calls, "/api/accuracy/sectors").at(-1)).toBe("/api/accuracy/sectors?horizon=5&period=3M&direction=up"));
+    expect(urlsOf(calls, "/api/accuracy/stocks").at(-1)).toBe(
+      "/api/accuracy/stocks?horizon=5&period=ALL&segment=all&direction=up&sort=beat_rate&order=desc",
+    );
+    const date = screen.getByRole("textbox", { name: "集計の基準日" });
+    await user.clear(date);
+    await user.type(date, "2026-07-21{Enter}");
+    await waitFor(() =>
+      expect(urlsOf(calls, "/api/accuracy/sectors").at(-1)).toBe("/api/accuracy/sectors?date=2026-07-21&horizon=5&period=3M&direction=up"),
+    );
+  });
+
+  it("検証結果がなければ、銘柄別・業種別の的中率は出さない", async () => {
+    renderAt("/accuracy", (p) => (p === "/api/accuracy" ? { body: ACCURACY_EMPTY } : undefined));
+    await screen.findByText("検証結果はまだありません");
+    expect(screen.queryByRole("heading", { name: /銘柄別の的中率/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /業種別の的中率/ })).toBeNull();
   });
 
   it("推移を読めなければ、エラーを出す", async () => {

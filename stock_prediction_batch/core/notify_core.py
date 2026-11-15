@@ -639,7 +639,7 @@ def _market_text(market: str) -> str:
 
 
 def candidate_column_count() -> int:
-    """買い候補の表の列の数(順位・コード・銘柄名・市場・業種・現在値 + 予測日数ごとの列 + 備考)。"""
+    """買い候補の表の列の数(順位・コード・銘柄名・市場・業種・予測日の株価 + 予測日数ごとの列 + 備考)。"""
     return 6 + len(const.PREDICT_HORIZONS) * len(_HORIZON_COLUMNS) + 1
 
 
@@ -757,7 +757,7 @@ def _candidate_table(candidates: list[Candidate]) -> list[str]:
     out = [_TABLE]
     out.append(
         f"<tr{_HEAD_ROW}>"
-        + "".join(f'<th style="{_TH}">{h}</th>' for h in ("順位", "コード", "銘柄名", "市場", "業種", "現在値"))
+        + "".join(f'<th style="{_TH}">{h}</th>' for h in ("順位", "コード", "銘柄名", "市場", "業種", "予測日の株価"))
         + _horizon_headers()
         + f'<th style="{_TH}">備考</th></tr>'
     )
@@ -1047,7 +1047,7 @@ def build_text(data: NotifyData, is_backfill: bool) -> str:
         for c in candidates:
             note = f" [{NOTE_SEPARATOR.join(c.notes)}]" if c.notes else ""
             head = f"{c.rank}. {display_code(c.code)} {c.name}{_market_text(c.market)} 業種 {c.sector or '-'}"
-            result.append(f"{head} 現在値 {fmt_price(c.base_price)} / {probs(c.by_horizon)}{note}")
+            result.append(f"{head} 予測日の株価 {fmt_price(c.base_price)} / {probs(c.by_horizon)}{note}")
         return result
 
     def fallback_lines(candidates: list[Candidate]) -> list[str]:

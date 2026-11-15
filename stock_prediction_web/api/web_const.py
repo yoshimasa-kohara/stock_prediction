@@ -37,7 +37,7 @@ LOG_LEVEL: Final[str] = "INFO"
 
 # 画面が /api/status を読み直す間隔(秒)。バッチ実行中の表示を新しくするため
 STATUS_REFRESH_SEC: Final[int] = 60
-# 上のメニューの銘柄の検索で出す候補の最大件数
+# 上のメニューの銘柄の検索(入力欄)で出す候補の最大件数
 STOCK_SEARCH_LIMIT: Final[int] = 10
 # 時価総額の単位の換算(DB の daily_valuation.market_cap は百万円。API は円で返す)
 MARKET_CAP_UNIT_YEN: Final[int] = 1_000_000
@@ -74,14 +74,49 @@ COMPARE_SECTOR_TOP_N: Final[int] = 5
 # 実行履歴: 対象の日付の初期値(直近の日数)と、1回に表示する件数
 RUNS_DEFAULT_DAYS: Final[int] = 7
 RUNS_PAGE_SIZE: Final[int] = 100
-# 銘柄の検索: 1回に表示する件数
+# 銘柄検索: 1回に表示する件数
 SCREEN_PAGE_SIZE: Final[int] = 50
-# 銘柄の検索: 全銘柄の備考を API のメモリに残す予測日の数(古いものから消す)
+# 銘柄検索: 全銘柄の備考を API のメモリに残す予測日の数(古いものから消す)
 NOTE_CACHE_DAYS: Final[int] = 5
 # 銘柄詳細: 過去の予測と答え合わせの表に出す最大の行数(新しい順)
 STOCK_PREDICTION_HISTORY_LIMIT: Final[int] = 500
 # 保有銘柄: メモの最大の文字数(holding.note は VARCHAR(500))
 HOLDING_NOTE_MAX_LENGTH: Final[int] = 500
+# 検討中銘柄: メモの最大の文字数(watch_stock.memo は VARCHAR(500))
+WATCH_STOCK_MEMO_MAX_LENGTH: Final[int] = 500
+# 銘柄詳細の業績
+# 通期の表に出す最大の年数と、四半期の表に出す最大の回数(新しい順)
+FINANCIAL_ANNUAL_LIMIT: Final[int] = 10
+FINANCIAL_QUARTERLY_LIMIT: Final[int] = 8
+# 前年同期とみなす、事業年度の終了日の月の差の範囲(11〜13か月前。決算期の変更に備えた幅)
+FINANCIAL_YOY_MIN_MONTHS: Final[int] = 11
+FINANCIAL_YOY_MAX_MONTHS: Final[int] = 13
+# 前年比を出さない会計期間の種類(決算期を変えたときの 4Q・5Q。前年に同じ期間がない)
+FINANCIAL_NO_YOY_PER_TYPES: Final[tuple[str, ...]] = ("4Q", "5Q")
+# 予想の修正だけの開示の doc_type(開示書類の種類)に含まれる文字列(2026-11-15 に本番の DB で確かめた。
+# EarnForecastRevision・REITEarnForecastRevision は業績予想、DividendForecastRevision・REITDividendForecastRevision は
+# 配当予想の修正。決算短信はバッチの const.FIN_STATEMENT_DOC_TYPE_KEYWORD(FinancialStatements)で見分ける)
+FIN_DIVIDEND_REVISION_DOC_TYPE_KEYWORD: Final[str] = "DividendForecastRevision"
+FIN_EARN_REVISION_DOC_TYPE_KEYWORD: Final[str] = "EarnForecastRevision"
+# 的中率: 銘柄別・業種別の的中率
+# 期間のタブは ACCURACY_RANK_PERIODS と同じ並び。期間の初期値
+ACCURACY_BREAKDOWN_DEFAULT_PERIOD: Final[str] = "3M"
+# 銘柄別に出す銘柄の、件数の下限(全銘柄、買い候補に入った日だけ)
+ACCURACY_STOCK_MIN_COUNT_ALL: Final[int] = 20
+ACCURACY_STOCK_MIN_COUNT_TOP: Final[int] = 5
+# 銘柄別: 1回に表示する件数
+ACCURACY_STOCK_PAGE_SIZE: Final[int] = 50
+# 銘柄別・業種別の予想の向き(up: 上がると予想した日だけ、down: 下がると予想した日だけ)。
+# 上がる・下がるの判定は、バッチが is_hit を作るときと同じ(上昇確率が const.UP_PROB_THRESHOLD 以上なら上がる)
+ACCURACY_DIRECTIONS: Final[dict[str, str]] = {"up": "上昇予想", "down": "下降予想"}
+ACCURACY_DIRECTION_DEFAULT: Final[str] = "up"
+# ランキング
+# 1回に表示する件数
+RANKING_PAGE_SIZE: Final[int] = 50
+# 「買い候補の常連」で数える、選んだ予測日を含む直近の予測日の数
+RANKING_REGULAR_DAYS: Final[int] = 20
+# 売買代金の下限の入力の単位(億円 → 円)
+RANKING_TURNOVER_UNIT_YEN: Final[int] = 100_000_000
 
 # =====================================================================
 # 表示する文字

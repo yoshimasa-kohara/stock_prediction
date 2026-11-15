@@ -1,11 +1,11 @@
 -- =====================================================================
 -- 株価予測システム テーブル作成(CREATE TABLE)
---   15テーブルを作成する
+--   16テーブルを作成する
 --   手動で実行する
 --     psql -U <ユーザー名> -d stock_prediction -f etc\db\sql\create_tables.sql
 --
---   【注意】各テーブルの CREATE TABLE の前に DROP TABLE があるので、実行すると15テーブル全ての
---   データが消える(収集した株価なども含む)。J-Quants の契約プランの期間より古いデータは取り直せない。
+--   【注意】各テーブルの CREATE TABLE の前に DROP TABLE があるので、実行すると16テーブル全ての
+--   データが消える(収集した株価、保有銘柄、検討中銘柄なども含む)。J-Quants の契約プランの期間より古いデータは取り直せない。
 --   データが入っているDBで実行する前に、必ずバックアップを取る。
 --   テーブル定義を後から変える場合は、このファイルを最新の定義に直し、
 --   既存のDBに当てる変更用のSQLを別のファイルとしてこのフォルダに追加する
@@ -519,5 +519,27 @@ COMMENT ON COLUMN index_daily_price.low         IS '安値';
 COMMENT ON COLUMN index_daily_price.close       IS '終値';
 COMMENT ON COLUMN index_daily_price.created_at  IS '登録日時';
 COMMENT ON COLUMN index_daily_price.updated_at  IS '更新日時';
+
+-- ---------------------------------------------------------------------
+-- 16. watch_stock(検討中銘柄)
+--   利用者が、買うか迷っている銘柄を画面から残しておく(1銘柄1行)。メール・バッチの処理には使わない
+-- ---------------------------------------------------------------------
+DROP TABLE IF EXISTS watch_stock;
+CREATE TABLE watch_stock (
+    code        VARCHAR(10)   NOT NULL,
+    memo        VARCHAR(500)  NOT NULL DEFAULT '',
+    pred_date   DATE,
+    base_price  NUMERIC(14,4),
+    created_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT pk_watch_stock PRIMARY KEY (code)
+);
+COMMENT ON TABLE  watch_stock            IS '検討中銘柄';
+COMMENT ON COLUMN watch_stock.code       IS '銘柄コード';
+COMMENT ON COLUMN watch_stock.memo       IS 'メモ';
+COMMENT ON COLUMN watch_stock.pred_date  IS '追加した日の予測日:追加した時点の最新の予測日。予測が1件もないときだけ NULL';
+COMMENT ON COLUMN watch_stock.base_price IS '追加した日の終値:pred_date の終値(調整前)。終値がなければ NULL';
+COMMENT ON COLUMN watch_stock.created_at IS '登録日時';
+COMMENT ON COLUMN watch_stock.updated_at IS '更新日時';
 
 COMMIT;

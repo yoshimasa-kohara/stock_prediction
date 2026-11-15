@@ -21,6 +21,7 @@ header .menu{display:none;font-size:22px;cursor:pointer;}
 /* 中身は画面の幅いっぱいに出す(最大の幅は決めない) */
 main{padding:16px;}
 h1{font-size:20px;margin:4px 0 12px;}
+.h1line{font-size:20px;font-weight:bold;margin:-4px 0 12px;}
 h2{font-size:16px;margin:22px 0 8px;padding-left:8px;border-left:4px solid #2f3e5c;}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;}
 .card{background:#fff;border:1px solid #d6dbe3;border-radius:6px;padding:12px 14px;}
@@ -48,7 +49,7 @@ h2{font-size:16px;margin:22px 0 8px;padding-left:8px;border-left:4px solid #2f3e
 table{border-collapse:separate;border-spacing:0;font-size:13px;}
 th,td{border-right:1px solid #bbb;border-bottom:1px solid #bbb;padding:4px 6px;white-space:nowrap;}
 thead tr:first-child th{border-top:1px solid #bbb;} th:first-child,td:first-child{border-left:1px solid #bbb;}
-th{background:#dce6f1;font-weight:bold;} th.main{background:#d9ead3;} th.act{background:#fff2cc;}
+th{background:#dce6f1;font-weight:bold;} th.main{background:#d9ead3;} th.act{background:#fff2cc;} th.buy{background:#40E0D0;}
 td.n{text-align:right;} td.c{text-align:center;} td.b{font-weight:bold;}
 tbody tr:nth-child(even) td{background:#f6f6f6;}
 .up{color:#c00000;font-weight:bold;} .dn{color:#0055cc;font-weight:bold;} .eq{color:#666;font-weight:bold;}
@@ -170,3 +171,31 @@ td.tip{cursor:help;}
 /* 精度の比較: コピーできなかったときの Markdown の枠 */
 .mdcopy{width:100%;font-family:Consolas,monospace;font-size:12px;}
 .panel h3{font-size:14px;margin:4px 0 6px;}
+/* ---- 検討中銘柄 ---- */
+/* 検討中銘柄に追加するボタン(☆ = 未追加、★ = 追加済み)。銘柄名のすぐ左に置く */
+.watchbtn{background:none;border:none;cursor:pointer;padding:0 4px 0 0;font-size:15px;line-height:1;color:#888;font-family:inherit;}
+.watchbtn.on{color:#e0a800;}
+.dialog textarea{resize:vertical;}
+.dialog .count{font-size:11px;color:#777;text-align:right;}
+/* 検討中銘柄の表: 1銘柄2行(追加した日・最新)。縞は銘柄ごと(tbody ごと)に付ける */
+table.watch tbody:nth-of-type(odd) tr:nth-child(even) td{background:#fff;}
+table.watch tbody:nth-of-type(even) td{background:#f6f6f6;}
+/* 下の行の最初のセル(区分)は、左のまとめたセル(rowSpan)の右の線と重なるので、左の線を消す */
+table.watch tbody tr + tr td:first-child{border-left:none;}
+td.memo{white-space:normal;min-width:180px;max-width:360px;}
+td.memo .memotext{white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:4px;}
+/* 保有銘柄: 表の上の「表示 ○件」と、メモ(押すと全文と短い表示を切り替える。全文は折り返して出す) */
+.rowcount{font-size:13px;margin:0 0 4px;text-align:left;}
+.memotgl{background:none;border:none;padding:0;margin:0;font:inherit;color:inherit;text-align:left;cursor:pointer;}
+.memotgl.full{display:block;width:max-content;max-width:300px;white-space:pre-wrap;overflow-wrap:anywhere;}
+/* ---- ランキング ---- */
+/* 選べないタブ(「全期間で高い銘柄」「買い候補の常連」のときの予測日数)は薄く表示する */
+.tabs button:disabled{opacity:.4;cursor:default;}
+/* ランキングの種類のタブは、スマホでは折り返さずに横スクロールにする */
+.tabscroll{margin-bottom:10px;}
+.tabscroll .tabs{margin-bottom:0;}
+@media (max-width:700px){
+ .tabscroll{overflow-x:auto;}
+ .tabscroll .tabs{flex-wrap:nowrap;}
+ .tabscroll .tabs button{white-space:nowrap;}
+}

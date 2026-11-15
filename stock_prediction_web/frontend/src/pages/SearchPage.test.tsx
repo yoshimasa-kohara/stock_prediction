@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { PRED_DATES, SCREEN, SCREEN_MORE } from "../test/apiData";
+import { PRED_DATES, SCREEN, SCREEN_MORE, WATCH_CODES } from "../test/apiData";
 import type { FakeResponse } from "../test/fixtures";
 import { renderApp, urlsOf } from "../test/renderApp";
 
@@ -13,7 +13,7 @@ function handler(screenRes: (q: URLSearchParams) => FakeResponse = () => ({ body
   };
 }
 
-describe("銘柄の検索", () => {
+describe("銘柄検索", () => {
   it("検索結果の件数と、買い候補と同じ形の表を出す", async () => {
     renderApp("/search", handler());
     expect(await screen.findByText("3 件")).toBeInTheDocument();
@@ -129,5 +129,73 @@ describe("銘柄の検索", () => {
     const table = await screen.findByRole("table");
     expect(within(table).getByText("条件に合う銘柄はありません")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "銘柄コード・銘柄名" })).toHaveValue("zzz");
+  });
+
+  it("銘柄名の左の「☆」で検討中銘柄に追加する。追加済みは「★」で、押すとメモを編集する", async () => {
+    const user = userEvent.setup();
+    const memos = new Map(WATCH_CODES.items.map((i) => [i.code, i.memo]));
+    let fail = true;
+    const calls = renderApp("/search", (p, q, m, b) => {
+      if (p === "/api/watch-stocks/codes") return { body: { items: [...memos].map(([code, memo]) => ({ code, memo })) } };
+      if (m === "PUT") {
+        if (fail) return { status: 404, body: { detail: "銘柄が見つかりません" } };
+        const code = p.split("/").at(-1)!;
+        const created = !memos.has(code);
+        memos.set(code, (b as { memo: string }).memo);
+        return { body: { code, created, message: "" } };
+      }
+      return handler()(p, q);
+    });
+    await screen.findByText("3 件");
+    // 追加済みの銘柄(11120)は ★、それ以外は ☆。銘柄名と同じセル(左に固定する列)の中に出す
+    const added = await screen.findByRole("button", { name: "サンプル商事Aの検討中銘柄のメモを編集" });
+    expect(added).toHaveTextContent("★");
+    const star = screen.getByRole("button", { name: "サンプル銀行Aを検討中銘柄に追加" });
+    expect(star).toHaveTextContent("☆");
+    expect(star.closest("td")).toHaveClass("fix");
+    expect(star.closest("td")).toContainElement(screen.getByRole("link", { name: "サンプル銀行A" }));
+
+    // 未追加: 「検討中銘柄に追加」。メモは空でもよい。「キャンセル」と Escape では追加しない
+    await user.click(star);
+    let dialog = screen.getByRole("dialog", { name: "検討中銘柄に追加" });
+    expect(within(dialog).getByText("1111 サンプル銀行A")).toBeInTheDocument();
+    expect(within(dialog).getByRole("textbox", { name: "メモ" })).toHaveValue("");
+    await user.click(within(dialog).getByRole("button", { name: "キャンセル" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(star);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+
+    // 保存できなければ、ダイアログにエラーを出す。保存できたら閉じて ★ にする
+    await user.click(star);
+    dialog = screen.getByRole("dialog", { name: "検討中銘柄に追加" });
+    await user.type(within(dialog).getByRole("textbox", { name: "メモ" }), "押し目を待つ{Enter}2行目");
+    await user.click(within(dialog).getByRole("button", { name: "追加" }));
+    expect(await within(dialog).findByText("銘柄が見つかりません")).toBeInTheDocument();
+    fail = false;
+    await user.click(within(dialog).getByRole("button", { name: "追加" }));
+    const edit = await screen.findByRole("button", { name: "サンプル銀行Aの検討中銘柄のメモを編集" });
+    expect(edit).toHaveTextContent("★");
+    expect(edit).toHaveClass("on");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(calls.filter((c) => c.method === "PUT").at(-1)).toEqual({
+      url: "/api/watch-stocks/11110",
+      method: "PUT",
+      body: { memo: "押し目を待つ\n2行目" },
+    });
+    // 表の API(/api/screen)は読み直さない(☆・★ は /api/watch-stocks/codes で決める)
+    expect(urlsOf(calls, "/api/screen")).toHaveLength(1);
+
+    // 追加済み: 「検討中銘柄のメモを編集」。入力欄に登録済みのメモを入れておく
+    await user.click(edit);
+    dialog = screen.getByRole("dialog", { name: "検討中銘柄のメモを編集" });
+    const box = within(dialog).getByRole("textbox", { name: "メモ" });
+    expect(box).toHaveValue("押し目を待つ\n2行目");
+    await user.clear(box);
+    await user.click(within(dialog).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(calls.filter((c) => c.method === "PUT").at(-1)!.body).toEqual({ memo: "" });
+    expect(screen.getByRole("button", { name: "サンプル銀行Aの検討中銘柄のメモを編集" })).toBeInTheDocument();
   });
 });

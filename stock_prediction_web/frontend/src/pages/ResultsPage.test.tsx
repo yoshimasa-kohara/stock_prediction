@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { PRED_DATES, RESULTS } from "../test/apiData";
+import { PRED_DATES, RESULTS, WATCH_CODES } from "../test/apiData";
 import { renderApp, urlsOf } from "../test/renderApp";
 
 describe("買い候補と実際の株価", () => {
@@ -120,5 +120,21 @@ describe("買い候補と実際の株価", () => {
       p === "/api/candidates/results" ? { status: 400, body: { detail: "期間は3か月以内にしてください" } } : undefined,
     );
     expect(await screen.findByRole("alert")).toHaveTextContent("期間は3か月以内にしてください");
+  });
+
+  it("銘柄名の左に、検討中銘柄のボタン(☆・★)を出す。押すとダイアログを開く", async () => {
+    const user = userEvent.setup();
+    renderApp("/candidates/results", (p) => {
+      if (p === "/api/watch-stocks/codes") return { body: WATCH_CODES };
+      return p === "/api/candidates/results" ? { body: RESULTS } : undefined;
+    });
+    const added = await screen.findByRole("button", { name: "サンプル商事Aの検討中銘柄のメモを編集" });
+    expect(added).toHaveTextContent("★");
+    expect(added.closest("td")).toHaveClass("fix");
+    const star = screen.getByRole("button", { name: "サンプル銀行Aを検討中銘柄に追加" });
+    expect(star).toHaveTextContent("☆");
+    await user.click(added);
+    const dialog = screen.getByRole("dialog", { name: "検討中銘柄のメモを編集" });
+    expect(within(dialog).getByRole("textbox", { name: "メモ" })).toHaveValue("決算の後に買う");
   });
 });

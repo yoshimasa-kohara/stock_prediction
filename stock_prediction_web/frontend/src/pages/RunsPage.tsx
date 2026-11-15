@@ -11,6 +11,7 @@ import ErrorMessage from "../components/ErrorMessage";
 import { useSettings } from "../context/contexts";
 import { formatDateTime, formatElapsed, formatInteger, truncate } from "../lib/format";
 import { statusBadgeClass } from "../lib/labels";
+import { usePageTitle } from "../lib/usePageTitle";
 
 /** エラーの内容を、表でそのまま出す最大の文字数(超えた分はマウスを置く・押すと出す) */
 export const ERROR_PREVIEW_LENGTH = 40;
@@ -38,6 +39,7 @@ function ErrorCell({ text }: { text: string | null }) {
 }
 
 export default function RunsPage() {
+  usePageTitle("実行履歴");
   const settings = useSettings();
   const [params, setParams] = useSearchParams();
   const query = {

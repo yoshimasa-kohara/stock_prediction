@@ -133,6 +133,12 @@ export function formatOku(value: number | null | undefined): string {
   return `${Math.round(value / 100_000_000).toLocaleString("ja-JP")}億円`;
 }
 
+/** 円の金額を億円の数にする(小数1桁・3桁区切り。単位は付けない。例: 52000000000 → "520.0"、-1250000000 → "-12.5") */
+export function formatOkuNumber(value: number | null | undefined): string {
+  if (isMissing(value)) return EMPTY;
+  return (value / 100_000_000).toLocaleString("ja-JP", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
 /** 出来高の目盛り(例: 1380000 → "138万") */
 export function formatVolume(value: number | null | undefined): string {
   if (isMissing(value)) return EMPTY;

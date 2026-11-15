@@ -6,6 +6,7 @@ import type { HoldingGroup, HoldingsResponse } from "../api/types";
 import { useApi } from "../api/useApi";
 import ErrorMessage from "../components/ErrorMessage";
 import { EditDialog, type LotTarget, RegisterDialog, SellDialog } from "../components/HoldingDialogs";
+import MemoText from "../components/MemoText";
 import NotesText from "../components/NotesText";
 import StockName from "../components/StockName";
 import Tabs from "../components/Tabs";
@@ -21,8 +22,14 @@ import {
   signClass,
 } from "../lib/format";
 import { judgmentClass } from "../lib/labels";
+import { usePageTitle } from "../lib/usePageTitle";
 
 type Dialog = { kind: "register" } | { kind: "edit"; target: LotTarget } | { kind: "sell"; target: LotTarget };
+
+/** 売却年のコンボボックスの「全て」の値(API の sold_year=all) */
+const SOLD_YEAR_ALL = "all";
+/** ヘッダーに買いの色(th.buy)を付ける列 */
+const BUY_HEADS = ["買値", "買い株数", "買いの金額", "購入日"];
 
 function HoldingTable({
   groups,
@@ -66,7 +73,7 @@ function HoldingTable({
               銘柄名
             </th>
             {["市場", "買値", "買い株数", "買いの金額", "購入日", "現在値", "現在の金額", "損益(%)", "損益(円)"].map((h) => (
-              <th key={h} rowSpan={2}>
+              <th key={h} rowSpan={2} className={BUY_HEADS.includes(h) ? "buy" : undefined}>
                 {h}
               </th>
             ))}
@@ -77,6 +84,7 @@ function HoldingTable({
             ))}
             <th rowSpan={2}>判定</th>
             <th rowSpan={2}>備考</th>
+            <th rowSpan={2}>メモ</th>
             <th rowSpan={2}>操作</th>
           </tr>
           <tr>
@@ -149,6 +157,8 @@ function HoldingTable({
                   <td>
                     <NotesText notes={g.notes} />
                   </td>
+                  {/* メモ: 購入が1回だけの銘柄は合計の行に出す。買い増しの銘柄は購入ごとの行に出す */}
+                  <td>{many ? null : <MemoText note={g.lots[0]?.note ?? null} />}</td>
                   <td className="c">{many ? "" : buttons(g, 0)}</td>
                 </tr>
                 {many &&
@@ -168,6 +178,9 @@ function HoldingTable({
                       <td className={`n ${signClass(lot.pnl_amount)}`}>{formatSignedNumber(lot.pnl_amount)}</td>
                       <td colSpan={predCols + 2} className="dash">
                         (判定は合計の行)
+                      </td>
+                      <td>
+                        <MemoText note={lot.note} />
                       </td>
                       <td className="c">{buttons(g, i)}</td>
                     </tr>
@@ -190,24 +203,25 @@ function SoldTable({ data }: { data: HoldingsResponse }) {
             <th>コード</th>
             <th className="fix">銘柄名</th>
             <th>市場</th>
-            <th>買値</th>
-            <th>買い株数</th>
-            <th>買いの金額</th>
-            <th>購入日</th>
+            <th className="buy">買値</th>
+            <th className="buy">買い株数</th>
+            <th className="buy">買いの金額</th>
+            <th className="buy">購入日</th>
             <th className="act">売値</th>
             <th className="act">売り株数</th>
             <th className="act">売りの金額</th>
             <th className="act">売却日</th>
-            <th>現在値</th>
             <th>損益(%)</th>
             <th>損益(円)</th>
             <th>保有した日数</th>
+            <th>メモ</th>
+            <th>現在値</th>
           </tr>
         </thead>
         <tbody>
           {data.sold.length === 0 && (
             <tr>
-              <td colSpan={15} className="c">
+              <td colSpan={16} className="c">
                 売却済みの銘柄はありません
               </td>
             </tr>
@@ -227,10 +241,13 @@ function SoldTable({ data }: { data: HoldingsResponse }) {
               <td className="n">{formatInteger(s.quantity)}</td>
               <td className="n">{formatInteger(s.sell_amount)}</td>
               <td>{s.sell_date}</td>
-              <td className="n">{formatPrice(s.current)}</td>
               <td className={`n ${signClass(s.pnl_rate)}`}>{formatSignedPercent(s.pnl_rate)}</td>
               <td className={`n ${signClass(s.pnl_amount)}`}>{formatSignedNumber(s.pnl_amount)}</td>
               <td className="n">{s.held_days}日</td>
+              <td>
+                <MemoText note={s.note} />
+              </td>
+              <td className="n">{formatPrice(s.current)}</td>
             </tr>
           ))}
         </tbody>
@@ -240,18 +257,29 @@ function SoldTable({ data }: { data: HoldingsResponse }) {
 }
 
 export default function HoldingsPage() {
+  usePageTitle("保有銘柄");
   const settings = useSettings();
-  const res = useApi<HoldingsResponse>("/api/holdings");
+  // 選んだ売却年("all" か4桁の年)。null は選んでいない(API が売却日の最新の年を決める)
+  const [year, setYear] = useState<string | null>(null);
+  const res = useApi<HoldingsResponse>("/api/holdings", year === null ? undefined : { sold_year: year });
   const [tab, setTab] = useState<"open" | "sold">("open");
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const { main_horizon: main, predict_horizons: horizons } = settings.batch;
-  const data = res.data;
+  // 売却年を選び直して読み直している間も、前の内容を出したままにする(タブやコンボボックスが消えないように)
+  const [data, setData] = useState<HoldingsResponse | null>(null);
+  if (res.data && res.data !== data) setData(res.data);
+  // コンボボックスに出す年(選んでいなければ、API が実際に使った年)
+  const selectedYear = year ?? (data && data.sold_year !== null ? String(data.sold_year) : SOLD_YEAR_ALL);
   const saved = (text: string) => {
     setDialog(null);
     setMessage(text);
+    // 読み直しても、今出している年を保つ(新しい年の売却を登録しても、表示の年が勝手に変わらないように)
+    if (data) setYear(selectedYear);
     res.reload();
   };
+  // 「表示 ○件」: 保有中は購入ごとの行の数(合計の行を開いているかどうかで変えない)
+  const lotCount = data ? data.groups.reduce((n, g) => n + g.lots.length, 0) : 0;
 
   return (
     <>
@@ -269,9 +297,24 @@ export default function HoldingsPage() {
         {data && tab === "open" && (
           <span className="sub">判定の日: {data.judge_date ? formatDateWithWeekday(data.judge_date) : "予測がまだありません"}</span>
         )}
-        <button type="button" className="btn" style={{ marginLeft: "auto" }} onClick={() => setDialog({ kind: "register" })}>
-          ＋ 銘柄を登録
-        </button>
+        {data && tab === "sold" && (
+          <label>
+            売却年{" "}
+            <select value={selectedYear} onChange={(e) => setYear(e.target.value)}>
+              <option value={SOLD_YEAR_ALL}>全て</option>
+              {data.sold_years.map((y) => (
+                <option key={y} value={String(y)}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {tab === "open" && (
+          <button type="button" className="btn" style={{ marginLeft: "auto" }} onClick={() => setDialog({ kind: "register" })}>
+            ＋ 銘柄を登録
+          </button>
+        )}
       </div>
       {message && (
         <div className="okbox" role="status">
@@ -301,7 +344,10 @@ export default function HoldingsPage() {
           {data.groups.length === 0 ? (
             <p className="info">保有銘柄はありません。「＋ 銘柄を登録」から登録してください</p>
           ) : (
-            <HoldingTable groups={data.groups} horizons={horizons} main={main} onDialog={setDialog} />
+            <>
+              <p className="rowcount">表示 {formatInteger(lotCount)}件</p>
+              <HoldingTable groups={data.groups} horizons={horizons} main={main} onDialog={setDialog} />
+            </>
           )}
           <p className="info">
             損益は平均買値で計算する。判定と損切りラインは、平均買値で銘柄ごとに1つ出す(メールと同じ)。現在値は判定の日の終値
@@ -326,6 +372,7 @@ export default function HoldingsPage() {
               </div>
             </div>
           </div>
+          <p className="rowcount">表示 {formatInteger(data.sold_shown_count)}件</p>
           <SoldTable data={data} />
           <p className="info">損益は売値で計算する(損益(円)=(売値 − 買値)× 売り株数)。現在値は、売った後の値動きを見るために出す</p>
         </>

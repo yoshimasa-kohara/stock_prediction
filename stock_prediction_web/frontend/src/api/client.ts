@@ -57,14 +57,14 @@ export async function apiGet<T>(path: string, query?: Record<string, QueryValue>
   return (await res.json()) as T;
 }
 
-/** API を POST・PUT で呼び、JSON を返す。失敗したら ApiError を投げる */
-export async function apiSend<T>(method: "POST" | "PUT", path: string, body: unknown): Promise<T> {
+/** API を POST・PUT・DELETE で呼び、JSON を返す。失敗したら ApiError を投げる。body を省くと本文なしで送る(DELETE) */
+export async function apiSend<T>(method: "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
       method,
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch {
     throw new ApiError(0, MSG_NETWORK_ERROR);

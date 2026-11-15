@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import App from "../App";
 import SettingsProvider from "../context/SettingsProvider";
 import StatusProvider from "../context/StatusProvider";
+import WatchStocksProvider from "../context/WatchStocksProvider";
 import { type FakeResponse, type FetchCall, SETTINGS, STATUS, mockApi } from "./fixtures";
 
 /** 画面ごとの API の返り値を決める関数(undefined なら 404) */
@@ -54,9 +55,11 @@ export function renderPage(
     <MemoryRouter initialEntries={[path]}>
       <SettingsProvider>
         <StatusProvider>
-          <Routes>
-            <Route path={routePath} element={page} />
-          </Routes>
+          <WatchStocksProvider>
+            <Routes>
+              <Route path={routePath} element={page} />
+            </Routes>
+          </WatchStocksProvider>
         </StatusProvider>
       </SettingsProvider>
     </MemoryRouter>,

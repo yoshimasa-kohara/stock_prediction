@@ -8,6 +8,7 @@ import {
   formatElapsed,
   formatMonthDay,
   formatOku,
+  formatOkuNumber,
   formatSignedNumber,
   formatTimes,
   formatVolume,
@@ -33,6 +34,10 @@ describe("書式(全画面で追加したもの)", () => {
     expect(formatTimes(undefined)).toBe(EMPTY);
     expect(formatOku(182_000_000_000)).toBe("1,820億円");
     expect(formatOku(null)).toBe(EMPTY);
+    expect(formatOkuNumber(52_000_000_000)).toBe("520.0");
+    expect(formatOkuNumber(123_456_780_000_000)).toBe("1,234,567.8");
+    expect(formatOkuNumber(-1_250_000_000)).toBe("-12.5");
+    expect(formatOkuNumber(null)).toBe(EMPTY);
     expect(formatVolume(1_380_000)).toBe("138万");
     expect(formatVolume(9_999.4)).toBe("9,999");
     expect(formatVolume(null)).toBe(EMPTY);

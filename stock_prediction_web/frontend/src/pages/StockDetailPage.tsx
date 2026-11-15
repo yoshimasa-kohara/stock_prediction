@@ -1,11 +1,15 @@
-// 銘柄詳細。株価の動き、会社の数字、予測と答え合わせの結果をまとめて見る
+// 銘柄詳細。株価の動き、会社の数字、予測と答え合わせの結果をまとめて見る。
+// 業績のブロック(components/FinancialsBlock.tsx)は、「最新の予測」と「過去の予測と答え合わせ」の間に置く
+import type { ReactNode } from "react";
 import { useParams } from "react-router";
 
 import type { HistoryRow, PredictionsResponse, StockInfo } from "../api/types";
 import { useApi } from "../api/useApi";
 import ErrorMessage from "../components/ErrorMessage";
+import FinancialsBlock from "../components/FinancialsBlock";
 import NotesText from "../components/NotesText";
 import ChartPanel from "../components/ChartPanel";
+import WatchStockButton from "../components/WatchStockButton";
 import { useSettings } from "../context/contexts";
 import {
   displayCode,
@@ -20,6 +24,7 @@ import {
   signClass,
 } from "../lib/format";
 import { verifyLabel } from "../lib/labels";
+import { usePageTitle } from "../lib/usePageTitle";
 
 function InfoCards({ info }: { info: StockInfo }) {
   return (
@@ -29,6 +34,15 @@ function InfoCards({ info }: { info: StockInfo }) {
         <div className="val">{formatPrice(info.close)}</div>
         <div className={`sub ${signClass(info.prev_change)}`}>
           前日比 {formatSignedNumber(info.prev_change, 1)}({formatSignedPercent(info.prev_change_rate)})
+        </div>
+      </div>
+      <div className="card">
+        <div className="lbl">次の決算発表予定日</div>
+        <div className="val">{info.earnings_date ?? "-"}</div>
+        <div className="sub">
+          {info.earnings_date
+            ? `${info.earnings_name ?? ""}(あと${info.earnings_days ?? "-"}営業日)`
+            : "予定日はまだ公表されていません"}
         </div>
       </div>
       <div className="card">
@@ -44,15 +58,6 @@ function InfoCards({ info }: { info: StockInfo }) {
           {formatPercent(info.roe)} ／ {formatPrice(info.fwd_eps)}
         </div>
         <div className="sub">時価総額 {formatOku(info.market_cap)}</div>
-      </div>
-      <div className="card">
-        <div className="lbl">次の決算発表予定日</div>
-        <div className="val">{info.earnings_date ?? "-"}</div>
-        <div className="sub">
-          {info.earnings_date
-            ? `${info.earnings_name ?? ""}(あと${info.earnings_days ?? "-"}営業日)`
-            : "予定日はまだ公表されていません"}
-        </div>
       </div>
     </div>
   );
@@ -115,7 +120,7 @@ function LatestTable({ data, horizons, main }: { data: PredictionsResponse; hori
               <thead>
                 <tr>
                   <th className="fix">予測日</th>
-                  <th>予測日の終値</th>
+                  <th>予測日の株価</th>
                   <th>買い候補の順位</th>
                   {horizons.flatMap((h) =>
                     ["上昇確率", "見込み"].map((n) => (
@@ -155,7 +160,7 @@ function LatestTable({ data, horizons, main }: { data: PredictionsResponse; hori
               </tbody>
             </table>
           </div>
-          <p className="info">見込み = 予測株価 ÷ 予測日の終値 − 1。マウスを置くと、市場比・予測株価・対象日を出す</p>
+          <p className="info">見込み = 予測株価 ÷ 予測日の株価 − 1。マウスを置くと、市場比・予測株価・対象日を出す</p>
         </>
       )}
     </div>
@@ -175,7 +180,7 @@ function HistoryTable({ data, horizons, main }: { data: PredictionsResponse; hor
               <th rowSpan={2} className="fix">
                 予測日
               </th>
-              <th rowSpan={2}>予測時の株価</th>
+              <th rowSpan={2}>予測日の株価</th>
               <th rowSpan={2}>買い候補の順位</th>
               {horizons.map((h) => (
                 <th key={h} colSpan={4} className={h === main ? "main" : undefined}>
@@ -246,23 +251,33 @@ function HistoryTable({ data, horizons, main }: { data: PredictionsResponse; hor
         </table>
       </div>
       <p className="info">
-        予測日の新しい順。値上がり率 = 実際の株価 ÷ 予測時の株価 − 1(赤字 = 上がった、青字 = 下がった)。答え合わせの日が来ていない日数は「-」
+        予測日の新しい順。値上がり率 = 実際の株価 ÷ 予測日の株価 − 1(赤字 = 上がった、青字 = 下がった)。答え合わせの日が来ていない日数は「-」
         {data.history.length >= data.history_limit ? `。新しい順に ${data.history_limit} 件(予測日 × 予測日数)まで表示しています` : ""}
       </p>
     </div>
   );
 }
 
-/** 最新の予測と、過去の予測と答え合わせ(縦に並べる) */
-function PredictionPanels({ code }: { code: string }) {
+/**
+ * 最新の予測と、過去の予測と答え合わせ(縦に並べる)。children(業績のブロック)は、2つの表の間に置く。
+ * 予測の読み込み中・エラーのときも、children は出す
+ */
+function PredictionPanels({ code, children }: { code: string; children: ReactNode }) {
   const settings = useSettings();
   const { main_horizon: main, predict_horizons: horizons } = settings.batch;
   const res = useApi<PredictionsResponse>(`/api/stocks/${encodeURIComponent(code)}/predictions`);
-  if (res.error) return <ErrorMessage message={res.error} />;
-  if (!res.data) return <p className="loading">読み込み中…</p>;
+  if (!res.data) {
+    return (
+      <>
+        {res.error ? <ErrorMessage message={res.error} /> : <p className="loading">読み込み中…</p>}
+        {children}
+      </>
+    );
+  }
   return (
     <>
       <LatestTable data={res.data} horizons={horizons} main={main} />
+      {children}
       <HistoryTable data={res.data} horizons={horizons} main={main} />
     </>
   );
@@ -271,34 +286,53 @@ function PredictionPanels({ code }: { code: string }) {
 export default function StockDetailPage() {
   const { code = "" } = useParams();
   const info = useApi<StockInfo>(`/api/stocks/${encodeURIComponent(code)}`);
+  // タブ名は、読み込み後は「株価予測-銘柄詳細-{銘柄名}」。読み込み中・エラー・銘柄名が空のときは表示用の銘柄コード
+  usePageTitle(`銘柄詳細-${info.data?.name || displayCode(code)}`);
   if (info.error) {
     return (
       <>
-        <h1>銘柄詳細 {displayCode(code)}</h1>
+        <h1>銘柄詳細</h1>
+        <p className="h1line">{displayCode(code)}</p>
         <ErrorMessage message={info.error} />
       </>
     );
   }
-  if (!info.data) return <p className="loading">読み込み中…</p>;
+  if (!info.data) {
+    return (
+      <>
+        <h1>銘柄詳細</h1>
+        <p className="loading">読み込み中…</p>
+      </>
+    );
+  }
   const s = info.data;
   return (
     <>
-      <h1>
-        {displayCode(s.code)} {s.name}{" "}
+      <h1>銘柄詳細</h1>
+      {/* 銘柄の見出し(コード・銘柄名・市場／業種／規模)は、h1 のすぐ下の行に出す。
+          銘柄名の横に、検討中銘柄に追加するボタン(☆・★) */}
+      <p className="h1line">
+        {displayCode(s.code)} {s.name} <WatchStockButton code={s.code} name={s.name} />{" "}
         <span className="h1sub">{[s.market, s.sector33, s.scale_category].filter(Boolean).join(" ／ ")}</span>
-      </h1>
+      </p>
       <InfoCards info={s} />
       <StockChart code={s.code} />
       <div className="panel">
         <h2>備考{s.notes_date ? `(${formatDateWithWeekday(s.notes_date)})` : ""}</h2>
         {s.notes.length > 0 ? <NotesText notes={s.notes} /> : <span className="info">備考はありません</span>}
       </div>
+      {/* 業績は別の API で読む(業績を読み込んでいる間も、上の表示は遅らせない) */}
       {s.is_target ? (
-        <PredictionPanels code={s.code} />
+        <PredictionPanels code={s.code}>
+          <FinancialsBlock code={s.code} />
+        </PredictionPanels>
       ) : (
-        <div className="panel">
-          <p className="info">予測の対象ではありません(予測するのはプライム・スタンダード・グロースの銘柄だけです)</p>
-        </div>
+        <>
+          <div className="panel">
+            <p className="info">予測の対象ではありません(予測するのはプライム・スタンダード・グロースの銘柄だけです)</p>
+          </div>
+          <FinancialsBlock code={s.code} />
+        </>
       )}
     </>
   );

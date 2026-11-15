@@ -1,7 +1,8 @@
 """備考の計算。メールと同じ結果にするため、バッチの core の関数を使う。
 
 備考の並びはメールと同じ:
-  買い候補・銘柄の検索・銘柄詳細: ストップ高・ストップ安 → 流動性注意 → クロス → トレンドラインの抜け → 割安さ・稼ぐ力
+  買い候補・銘柄検索・銘柄詳細・検討中銘柄:
+    ストップ高・ストップ安 → 流動性注意 → クロス → トレンドラインの抜け → 割安さ・稼ぐ力
   保有銘柄: 損切りライン → クロス → トレンドラインの抜け → 割安さ・稼ぐ力
 """
 
@@ -53,6 +54,40 @@ def to_notes(texts: list[str]) -> list[Note]:
     return [to_note(t) for t in texts]
 
 
+def avg_turnovers(conn: psycopg.Connection[DictRow], target: date, codes: list[str]) -> dict[str, float]:
+    """銘柄ごとの、売買代金の平均(円)。指定日以前の直近 const.LIQUIDITY_AVG_DAYS(20)営業日の turnover の平均。
+
+    core/notify_core.py の load_notify_data の手順3 と同じ計算(その銘柄の株価がある日を新しい順に数える。
+    turnover が NULL の日は 0)。株価がない銘柄は入らない。
+    備考の流動性注意(market_notes)と、ランキングの絞り込み・売買代金の列(/api/rankings)が共通で使う。
+    銘柄ごとに索引(idx_daily_price_code_date)で直近の行だけを読むので、全銘柄でも速い。
+    """
+    if not codes:
+        return {}
+    rows = conn.execute(
+        """
+        SELECT c.code, t.avg_turnover
+        FROM unnest(%(codes)s::varchar[]) AS c(code)
+        CROSS JOIN LATERAL (
+            SELECT avg(COALESCE(x.turnover, 0)) AS avg_turnover, count(*) AS n
+            FROM (
+                SELECT d.turnover FROM daily_price d
+                WHERE d.code = c.code AND d.trade_date <= %(target)s
+                ORDER BY d.trade_date DESC LIMIT %(days)s
+            ) x
+        ) t
+        WHERE t.n > 0
+        """,
+        {"codes": codes, "target": target, "days": const.LIQUIDITY_AVG_DAYS},
+    ).fetchall()
+    return {str(r["code"]): float(r["avg_turnover"]) for r in rows}
+
+
+def is_low_liquidity(avg_turnover: float) -> bool:
+    """流動性注意か(売買代金の平均が const.LIQUIDITY_WARN_TURNOVER 未満。メールの備考と同じ条件)。"""
+    return avg_turnover < const.LIQUIDITY_WARN_TURNOVER
+
+
 def market_notes(conn: psycopg.Connection[DictRow], target: date, codes: list[str]) -> dict[str, list[str]]:
     """ストップ高・ストップ安と流動性注意(core/notify_core.py の load_notify_data の手順3 と同じ条件)。"""
     if not codes:
@@ -64,18 +99,7 @@ def market_notes(conn: psycopg.Connection[DictRow], target: date, codes: list[st
             (target, codes),
         ).fetchall()
     }
-    liquidity = conn.execute(
-        """
-        SELECT code, avg(COALESCE(turnover, 0)) AS avg_turnover
-        FROM (
-            SELECT code, turnover, row_number() OVER (PARTITION BY code ORDER BY trade_date DESC) AS n
-            FROM daily_price WHERE code = ANY(%s) AND trade_date <= %s
-        ) t
-        WHERE n <= %s GROUP BY code
-        """,
-        (codes, target, const.LIQUIDITY_AVG_DAYS),
-    ).fetchall()
-    low = {str(r["code"]) for r in liquidity if r["avg_turnover"] < const.LIQUIDITY_WARN_TURNOVER}
+    low = {code for code, avg in avg_turnovers(conn, target, codes).items() if is_low_liquidity(avg)}
     result: dict[str, list[str]] = {}
     for code in codes:
         notes: list[str] = []
@@ -111,7 +135,7 @@ def signal_notes(conn: psycopg.Connection[DictRow], target: date, codes: list[st
 
 
 def stock_notes(conn: psycopg.Connection[DictRow], target: date, codes: list[str]) -> dict[str, list[str]]:
-    """買い候補と同じ並びの備考(銘柄の検索・銘柄詳細で使う)。備考がない銘柄は空のリスト。"""
+    """買い候補と同じ並びの備考(銘柄検索・銘柄詳細・検討中銘柄で使う)。備考がない銘柄は空のリスト。"""
     codes = sorted(set(codes))
     base = market_notes(conn, target, codes)
     signals = signal_notes(conn, target, codes)
@@ -148,7 +172,7 @@ class NoteCache:
 
 @dataclass(frozen=True)
 class NoteFilter:
-    """銘柄の検索で絞り込む備考の種類。
+    """銘柄検索で絞り込む備考の種類。
 
     文言が完全に一致するか、prefix で始まる備考を「付いている」とみなす(トレンドラインは接触回数で文言が変わるため)。
     """

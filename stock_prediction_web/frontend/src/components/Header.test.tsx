@@ -14,20 +14,22 @@ function renderAt(path: string) {
 }
 
 describe("Header(上のメニュー)", () => {
-  it("8画面へのリンクを、決めた順に出す", () => {
+  it("10画面へのリンクを、決めた順に出す", () => {
     renderAt("/");
     const nav = screen.getByRole("navigation", { name: "メニュー" });
     const links = Array.from(nav.querySelectorAll("a")).map((a) => [a.textContent, a.getAttribute("href")]);
     expect(links).toEqual(MENU_ITEMS.map((m) => [m.label, m.path]));
-    expect(links).toHaveLength(8);
+    expect(links).toHaveLength(10);
   });
 
   it.each([
     ["/", "トップ"],
     ["/candidates?from=2026-07-22&to=2026-07-22", "買い候補"],
     ["/candidates/results", "買い候補と実際の株価"],
-    ["/search", "銘柄の検索"],
+    ["/search", "銘柄検索"],
+    ["/rankings?type=regular", "ランキング"],
     ["/holdings", "保有銘柄"],
+    ["/watch-stocks", "検討中銘柄"],
     ["/accuracy", "的中率"],
     ["/accuracy/compare", "精度の比較"],
     ["/runs", "実行履歴"],

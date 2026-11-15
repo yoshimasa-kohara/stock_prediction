@@ -1,4 +1,4 @@
-// 上のメニュー。左に「株価予測」、8画面へのリンク、右に銘柄の検索。
+// 上のメニュー。左に「株価予測」、10画面へのリンク、右に銘柄の検索(入力欄)。
 // スマホ(幅 700px 以下)では「☰」のボタンにまとめる
 import { useState } from "react";
 import { Link, NavLink } from "react-router";

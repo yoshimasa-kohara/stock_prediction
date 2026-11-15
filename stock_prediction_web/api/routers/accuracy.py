@@ -4,11 +4,14 @@ GET /api/accuracy: 期間(直近1か月・3か月・全期間)の集計と、保
 GET /api/accuracy/daily: 予測日ごとの推移(買い候補の市場の中央値との差、全銘柄の的中率)
 GET /api/accuracy/compare: 精度の比較。全銘柄・買い候補・買い候補(業種分散)を並べる
 GET /api/accuracy/rank: 買い候補 順位別 的中率(順位の帯ごとの、上昇の的中率)
+GET /api/accuracy/stocks: 銘柄別の的中率
+GET /api/accuracy/sectors: 業種別の的中率
 
 期間は対象日(答え合わせの日)で区切る(バッチの core/verify_core.py の期間の集計と同じ)。
 保有銘柄の集計は、集計テーブルに区分がないので、prediction と holding からその場で計算する。
 """
 
+from collections.abc import Callable
 from datetime import date
 from typing import Annotated, Any
 
@@ -734,4 +737,370 @@ def get_accuracy_rank(conn: Conn, target: Annotated[date | None, Query(alias="da
         diff_bands=[RankBand(rank_from=lo, rank_to=hi) for lo, hi in web_const.ACCURACY_RANK_DIFF_BANDS],
         default_period=web_const.ACCURACY_RANK_DEFAULT_PERIOD,
         periods=[] if summary_date is None else rank_periods(conn, summary_date),
+    )
+
+
+# =====================================================================
+# 銘柄別・業種別の的中率
+# =====================================================================
+
+# 銘柄別の対象(全銘柄、買い候補に入った日だけ)
+STOCK_SEGMENT_ALL: str = "all"
+STOCK_SEGMENT_TOP: str = "top"
+# 銘柄別の並べ替えに使える項目(列の見出しを押したとき)。
+# rank は初期の並び(予想の向きで変わる。stock_sort_key)
+STOCK_SORT_KEYS: list[str] = [
+    "rank", "code", "name", "market", "sector33", "verified_count", "hit_rate", "beat_rate", "avg_change_rate",
+    "avg_price_error_rate",
+]  # fmt: skip
+# 文字の項目(値がない(空の)行は後ろに並べる)
+_STOCK_TEXT_KEYS: tuple[str, ...] = ("code", "name", "market", "sector33")
+
+
+class StockAccuracyRow(BaseModel):
+    """銘柄別の的中率の1銘柄。rank は初期の並び(予想の向きで変わる。stock_sort_key)での順位。"""
+
+    rank: int
+    code: str
+    name: str
+    market: str
+    sector33: str
+    verified_count: int
+    hit_rate: float | None
+    beat_rate: float | None
+    avg_change_rate: float | None
+    avg_price_error_rate: float | None
+
+
+class StockAccuracyResponse(BaseModel):
+    """/api/accuracy/stocks の返り値。集計がまだなければ summary_date は None で、rows は空。
+
+    period_start は期間の最初の日(この日より後。全期間は None)。min_count は件数の下限。
+    direction は予想の向き(up: 上昇予想、down: 下降予想)。
+    """
+
+    summary_date: date | None
+    horizon: int
+    period: str
+    period_start: date | None
+    segment: str
+    direction: str
+    min_count: int
+    total: int
+    offset: int
+    has_more: bool
+    sort: str
+    order: str
+    rows: list[StockAccuracyRow]
+
+
+class SectorAccuracyValues(BaseModel):
+    """業種別の的中率の、全銘柄か買い候補の値。件数が0なら率は None。"""
+
+    verified_count: int
+    hit_rate: float | None
+    beat_rate: float | None
+    avg_change_rate: float | None
+
+
+class SectorAccuracyRow(BaseModel):
+    """業種別の的中率の1業種。業種は予測した時点の33業種(prediction.sector33_code)。ない行は「(不明)」。"""
+
+    sector33_code: str | None
+    sector33: str
+    all: SectorAccuracyValues
+    top: SectorAccuracyValues
+
+
+class SectorAccuracyResponse(BaseModel):
+    """/api/accuracy/sectors の返り値。集計がまだなければ summary_date は None で、rows は空。"""
+
+    summary_date: date | None
+    horizon: int
+    period: str
+    period_start: date | None
+    direction: str
+    rows: list[SectorAccuracyRow]
+
+
+def check_breakdown_period(period: str) -> None:
+    """期間が web_const.ACCURACY_RANK_PERIODS(1M・3M・6M・1Y・2Y・ALL)にないなら 400。"""
+    if period not in web_const.ACCURACY_RANK_PERIODS:
+        raise ApiError(400, f"期間は {'・'.join(web_const.ACCURACY_RANK_PERIODS)} のどれかを指定してください")
+
+
+def check_direction(direction: str) -> None:
+    """予想の向きが web_const.ACCURACY_DIRECTIONS(up・down)にないなら 400。"""
+    if direction not in web_const.ACCURACY_DIRECTIONS:
+        raise ApiError(400, "予想の向きが正しくありません")
+
+
+# 予想の向きの条件。バッチが is_hit を作るとき(core/verify_core.py の _UPDATE_SQL)と同じ基準で、
+# 上昇確率が const.UP_PROB_THRESHOLD 以上なら上がる予想、未満なら下がる予想
+# (up_prob は NOT NULL なので、どちらでもない予測はない)
+_DIRECTION_CONDS: dict[str, str] = {
+    "up": "p.up_prob >= %(threshold)s",
+    "down": "p.up_prob < %(threshold)s",
+}
+
+
+def _breakdown_source(
+    summary_date: date, horizon: int, period: str, direction: str
+) -> tuple[str, dict[str, Any], date | None]:
+    """銘柄別・業種別で共通の、数える行(FROM と WHERE)と、そのパラメータ、期間の最初の日。
+
+    検証済みの予測の行を、対象日で区切る(順位別の的中率と同じ rank_period_start)。選んだ予想の向きの行だけを数える。
+    市場の中央値は、同じ予測日・予測日数の verify_daily_summary の全銘柄(ALL)の行の market_median。
+    """
+    start = rank_period_start(summary_date, web_const.ACCURACY_RANK_PERIODS[period])
+    params: dict[str, Any] = {
+        "horizon": horizon,
+        "verified": const.VERIFY_STATUS_VERIFIED,
+        "d": summary_date,
+        "all": const.SEGMENT_ALL,
+        "top_n": const.BUY_CANDIDATE_COUNT,
+        "threshold": const.UP_PROB_THRESHOLD,
+    }
+    sql = f"""
+        FROM prediction p
+        LEFT JOIN verify_daily_summary m
+          ON m.pred_date = p.pred_date AND m.horizon = p.horizon AND m.segment = %(all)s
+        WHERE p.horizon = %(horizon)s AND p.verify_status = %(verified)s AND p.target_date <= %(d)s
+          AND {_DIRECTION_CONDS[direction]}
+    """
+    if start is not None:
+        sql += " AND p.target_date > %(start)s"
+        params["start"] = start
+    return sql, params, start
+
+
+# 集計の式(条件 cond に合う行だけを数える)
+def _aggregates(cond: str, prefix: str) -> str:
+    return f"""
+        count(*) FILTER (WHERE {cond}) AS {prefix}verified_count,
+        avg(CASE WHEN p.is_hit THEN 1.0 ELSE 0.0 END) FILTER (WHERE {cond}) AS {prefix}hit_rate,
+        avg(CASE WHEN p.change_rate > m.market_median THEN 1.0 ELSE 0.0 END)
+            FILTER (WHERE {cond} AND m.market_median IS NOT NULL AND p.change_rate IS NOT NULL) AS {prefix}beat_rate,
+        avg(p.change_rate) FILTER (WHERE {cond}) AS {prefix}avg_change_rate,
+        avg(abs(p.pred_price - p.actual_price) / p.actual_price)
+            FILTER (WHERE {cond} AND p.actual_price > 0) AS {prefix}avg_price_error_rate
+    """
+
+
+# 買い候補に入った日だけ(buy_rank が 1〜const.BUY_CANDIDATE_COUNT)
+_TOP_COND: str = "p.buy_rank BETWEEN 1 AND %(top_n)s"
+
+
+def _none_last(value: Any, sign: int) -> tuple[bool, float]:
+    """並べ替えのキー(値がないものは後ろ)。sign が -1 なら高い順、1 なら低い順。"""
+    return value is None, sign * float(value or 0)
+
+
+def stock_sort_key(direction: str) -> Callable[[Any], tuple[object, ...]]:
+    """銘柄別の初期の並びのキー(値がない銘柄は、その項目で後ろ)。
+
+    up: 市場の中央値を上回った割合の高い順 → 騰落率の平均の高い順 → 件数の多い順 → 銘柄コードの順
+    down: 的中率の高い順 → 騰落率の平均の低い順 → 件数の多い順 → 銘柄コードの順
+    """
+    first, change_sign = ("beat_rate", -1) if direction == "up" else ("hit_rate", 1)
+    return lambda r: (
+        *_none_last(r[first], -1),
+        *_none_last(r["avg_change_rate"], change_sign),
+        -int(r["verified_count"]),
+        str(r["code"]),
+    )
+
+
+def sort_stock_rows(rows: list[StockAccuracyRow], sort: str, order: str) -> list[StockAccuracyRow]:
+    """銘柄別の行を並べ替える。値がない行は後ろ。同じ値の行は、初期の並び(順位)の順のまま。"""
+    if sort == "rank":
+        return rows if order == "asc" else rows[::-1]
+    empty: tuple[object, ...] = (None, "") if sort in _STOCK_TEXT_KEYS else (None,)
+    with_value = [r for r in rows if getattr(r, sort) not in empty]
+    without = [r for r in rows if getattr(r, sort) in empty]
+    with_value.sort(key=lambda r: getattr(r, sort), reverse=order == "desc")
+    return with_value + without
+
+
+@router.get("/api/accuracy/stocks", response_model=StockAccuracyResponse)
+@log_api
+def get_accuracy_stocks(
+    conn: Conn,
+    target: Annotated[date | None, Query(alias="date")] = None,
+    horizon: int = const.MAIN_HORIZON,
+    period: str = web_const.ACCURACY_BREAKDOWN_DEFAULT_PERIOD,
+    segment: str = STOCK_SEGMENT_ALL,
+    direction: str = web_const.ACCURACY_DIRECTION_DEFAULT,
+    sort: str = "rank",
+    order: str = "asc",
+    offset: int = 0,
+) -> StockAccuracyResponse:
+    """銘柄別の的中率。集計の基準日は /api/accuracy と同じ決め方。期間は対象日で区切る。
+
+    集計テーブルに銘柄別の区分はないので、prediction からその場で計算する。
+    選んだ予想の向きの予測だけを数え、その件数が下限(全銘柄 ACCURACY_STOCK_MIN_COUNT_ALL、
+    買い候補 ACCURACY_STOCK_MIN_COUNT_TOP)以上の銘柄だけを返す。
+
+    Args:
+        target: 集計の基準日(省略すると最新)
+        horizon: 予測日数
+        period: 1M・3M・6M・1Y・2Y・ALL
+        segment: all(全銘柄)か top(買い候補に入った日だけ)
+        direction: up(上がると予想した日だけ)か down(下がると予想した日だけ)
+        sort: 並べ替えの項目(STOCK_SORT_KEYS。省略すると初期の並び(rank))
+        order: asc(小さい順)か desc(大きい順)
+        offset: 何件目から返すか
+    """
+    check_horizon(horizon)
+    check_breakdown_period(period)
+    if segment not in (STOCK_SEGMENT_ALL, STOCK_SEGMENT_TOP):
+        raise ApiError(400, f"対象の指定が正しくありません({segment})")
+    check_direction(direction)
+    if sort not in STOCK_SORT_KEYS:
+        raise ApiError(400, f"並べ替えの指定が正しくありません({sort})")
+    if order not in ("asc", "desc"):
+        raise ApiError(400, "order は asc か desc を指定してください")
+    if offset < 0:
+        raise ApiError(400, "offset は 0 以上を指定してください")
+    top = segment == STOCK_SEGMENT_TOP
+    min_count = web_const.ACCURACY_STOCK_MIN_COUNT_TOP if top else web_const.ACCURACY_STOCK_MIN_COUNT_ALL
+    summary_date, _ = resolve_summary_date(conn, target)
+    rows: list[StockAccuracyRow] = []
+    start: date | None = None
+    if summary_date is not None:
+        source, params, start = _breakdown_source(summary_date, horizon, period, direction)
+        if top:
+            source += f" AND {_TOP_COND}"
+        params["min_count"] = min_count
+        found = conn.execute(
+            f"""
+            WITH s AS (
+                SELECT p.code, {_aggregates("TRUE", "")}
+                {source}
+                GROUP BY p.code
+                HAVING count(*) >= %(min_count)s
+            )
+            SELECT s.*, COALESCE(sm.name, '') AS name, COALESCE(sm.market_name, '') AS market,
+                   COALESCE(sm.sector33_name, '') AS sector33
+            FROM s LEFT JOIN stock_master sm ON sm.code = s.code
+            """,
+            params,
+        ).fetchall()
+        # 初期の並び(予想の向きで変わる)の順で、順位を付ける
+        ordered = sorted(found, key=stock_sort_key(direction))
+        rows = [
+            StockAccuracyRow(
+                rank=i + 1,
+                code=str(r["code"]),
+                name=str(r["name"]),
+                market=str(r["market"]),
+                sector33=str(r["sector33"]),
+                verified_count=int(r["verified_count"]),
+                hit_rate=to_float(r["hit_rate"]),
+                beat_rate=to_float(r["beat_rate"]),
+                avg_change_rate=to_float(r["avg_change_rate"]),
+                avg_price_error_rate=to_float(r["avg_price_error_rate"]),
+            )
+            for i, r in enumerate(ordered)
+        ]
+        # 同じ値の行は初期の並びの順のまま
+        rows = sort_stock_rows(rows, sort, order)
+    page = rows[offset : offset + web_const.ACCURACY_STOCK_PAGE_SIZE]
+    return StockAccuracyResponse(
+        summary_date=summary_date,
+        horizon=horizon,
+        period=period,
+        period_start=start,
+        segment=segment,
+        direction=direction,
+        min_count=min_count,
+        total=len(rows),
+        offset=offset,
+        has_more=offset + len(page) < len(rows),
+        sort=sort,
+        order=order,
+        rows=page,
+    )
+
+
+def _sector_values(row: dict[str, Any], prefix: str) -> SectorAccuracyValues:
+    return SectorAccuracyValues(
+        verified_count=int(row[f"{prefix}verified_count"]),
+        hit_rate=to_float(row[f"{prefix}hit_rate"]),
+        beat_rate=to_float(row[f"{prefix}beat_rate"]),
+        avg_change_rate=to_float(row[f"{prefix}avg_change_rate"]),
+    )
+
+
+def sector_sort_key(direction: str) -> Callable[[Any], tuple[object, ...]]:
+    """業種別の並びのキー(値がない業種は、その項目で後ろ。最後は件数の多い順 → 業種コードの順)。
+
+    up: 全銘柄の市場の中央値を上回った割合の高い順 → 全銘柄の騰落率の平均の高い順
+    down: 全銘柄の的中率の高い順 → 全銘柄の騰落率の平均の低い順
+    """
+    first, change_sign = ("all_beat_rate", -1) if direction == "up" else ("all_hit_rate", 1)
+    return lambda r: (
+        *_none_last(r[first], -1),
+        *_none_last(r["all_avg_change_rate"], change_sign),
+        -int(r["all_verified_count"]),
+        str(r["sector33_code"] or ""),
+    )
+
+
+@router.get("/api/accuracy/sectors", response_model=SectorAccuracyResponse)
+@log_api
+def get_accuracy_sectors(
+    conn: Conn,
+    target: Annotated[date | None, Query(alias="date")] = None,
+    horizon: int = const.MAIN_HORIZON,
+    period: str = web_const.ACCURACY_BREAKDOWN_DEFAULT_PERIOD,
+    direction: str = web_const.ACCURACY_DIRECTION_DEFAULT,
+) -> SectorAccuracyResponse:
+    """業種別の的中率。33業種(予測した時点の業種)ごとに、全銘柄と買い候補の値を返す。
+
+    期間・予想の向き・数え方は /api/accuracy/stocks と同じ。並び(sector_sort_key)は予想の向きで変わる。
+    """
+    check_horizon(horizon)
+    check_breakdown_period(period)
+    check_direction(direction)
+    summary_date, _ = resolve_summary_date(conn, target)
+    if summary_date is None:
+        return SectorAccuracyResponse(
+            summary_date=None, horizon=horizon, period=period, period_start=None, direction=direction, rows=[]
+        )
+    source, params, start = _breakdown_source(summary_date, horizon, period, direction)
+    found = conn.execute(
+        f"""
+        SELECT p.sector33_code, {_aggregates("TRUE", "all_")}, {_aggregates(_TOP_COND, "top_")}
+        {source}
+        GROUP BY p.sector33_code
+        """,
+        params,
+    ).fetchall()
+    names = {
+        str(r["sector33_code"]): str(r["sector33_name"] or r["sector33_code"])
+        for r in conn.execute(
+            "SELECT DISTINCT sector33_code, sector33_name FROM stock_master WHERE sector33_code IS NOT NULL"
+        ).fetchall()
+    }
+    ordered = sorted(found, key=sector_sort_key(direction))
+    return SectorAccuracyResponse(
+        summary_date=summary_date,
+        horizon=horizon,
+        period=period,
+        period_start=start,
+        direction=direction,
+        rows=[
+            SectorAccuracyRow(
+                sector33_code=None if r["sector33_code"] is None else str(r["sector33_code"]),
+                sector33=(
+                    SECTOR_UNKNOWN
+                    if r["sector33_code"] is None
+                    else names.get(str(r["sector33_code"]), str(r["sector33_code"]))
+                ),
+                all=_sector_values(dict(r), "all_"),
+                top=_sector_values(dict(r), "top_"),
+            )
+            for r in ordered
+        ],
     )

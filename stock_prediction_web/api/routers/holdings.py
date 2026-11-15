@@ -1,6 +1,8 @@
-"""保有銘柄の API。画面が DB に書き込むのは、この holding(保有銘柄)だけ。
+"""保有銘柄の API。画面が DB に書き込むのは、この holding(保有銘柄)と
+watch_stock(検討中銘柄。api/routers/watch_stocks.py)だけ。
 
 GET  /api/holdings: 保有中の銘柄(銘柄ごとの合計の行と購入ごとの行)と判定・損益・備考、売却済みの行
+                    (売却済みは sold_year で売却年を絞り込む。省略すると売却日の最新の年)
 POST /api/holdings: 登録(買い増しも、購入ごとに別の行として登録する)
 PUT  /api/holdings/{holding_id}: 買値・買い株数・購入日・メモを直す(銘柄は変えられない)
 POST /api/holdings/{holding_id}/sell: 売却(一部の売却は行を分ける。行は削除しない)
@@ -8,6 +10,7 @@ POST /api/holdings/{holding_id}/sell: 売却(一部の売却は行を分ける�
 判定と損切りラインは、メールと同じく core/notify_core.py の judge_holding、hits_stop_loss を、平均買値で使う。
 """
 
+import re
 from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any
@@ -32,6 +35,9 @@ from core.notify_core import (
 )
 
 router = APIRouter()
+
+# 売却年の絞り込み(sold_year)で「年で絞り込まない」を表す値(画面の「全て」)
+SOLD_YEAR_ALL = "all"
 
 
 # =====================================================================
@@ -114,8 +120,14 @@ class HoldingsResponse(BaseModel):
     judge_date: date | None
     groups: list[HoldingGroup]
     totals: Totals
+    # sold と下の合計(sold_buy_amount など)は、売却年で絞り込んだ後の行のもの
     sold: list[SoldRow]
+    # 売却済みの全件の件数(絞り込む前。画面のタブの件数に使う)
     sold_count: int
+    # 売却日の年の一覧(重複なし、降順)、実際に使った年(全て・0件のときは None)、絞り込んだ後の行数
+    sold_years: list[int]
+    sold_year: int | None
+    sold_shown_count: int
     sold_pnl_amount: float
     # 売却済みの合計。買値・売値の合計は (値 × 売り株数) の合計、損益(%)は損益 ÷ 買値の合計
     sold_buy_amount: float
@@ -145,16 +157,36 @@ def _latest_closes(conn: Conn, codes: list[str], until: date | None) -> dict[str
     return {str(r["code"]): (Decimal(r["close"]), r["trade_date"]) for r in rows}
 
 
+def _parse_sold_year(sold_year: str | None) -> tuple[bool, int | None]:
+    """sold_year を読む。返り値は (年で絞り込まないか, 指定した年)。
+
+    省略は (False, None)(売却日の最新の年を使う)、"all" は (True, None)、4桁の年は (False, 年)。
+    それ以外は 400。
+    """
+    if sold_year is None:
+        return False, None
+    if sold_year == SOLD_YEAR_ALL:
+        return True, None
+    if re.fullmatch(r"[0-9]{4}", sold_year) is None:
+        raise ApiError(400, "売却年が正しくありません")
+    return False, int(sold_year)
+
+
 @router.get("/api/holdings", response_model=HoldingsResponse)
 @log_api
 def get_holdings(
-    conn: Conn, target: Annotated[date | None, Query(alias="date")] = None, include_sold: bool = True
+    conn: Conn,
+    target: Annotated[date | None, Query(alias="date")] = None,
+    include_sold: bool = True,
+    sold_year: str | None = None,
 ) -> HoldingsResponse:
     """保有銘柄の一覧。保有中は売却日がない行(購入日が判定の日より後の行も含む)。
 
     判定は判定の日(省略すると最新の予測日)の予測で、銘柄ごとに平均買値で1つ出す(メールと同じ)。
     現在値は、判定の日以前で一番新しい終値(調整前。メールと同じ)。
+    売却済みは sold_year の年(暦の年)に売った行だけを返す。省略すると売却日の最新の年、"all" は全ての年。
     """
+    all_years, year = _parse_sold_year(sold_year)
     judge_date: date | None
     try:
         judge_date = resolve_pred_date(conn, target)
@@ -246,9 +278,14 @@ def get_holdings(
         pnl_rate=None if t.pnl_rate is None else float(t.pnl_rate),
     )
 
-    sold_rows = conn.execute(
+    all_sold_rows = conn.execute(
         "SELECT * FROM holding WHERE sell_date IS NOT NULL ORDER BY sell_date DESC, holding_id DESC"
     ).fetchall()
+    # 売却年の絞り込み。省略したときは売却日の最新の年(売却済みが0件なら絞り込まない)
+    sold_years = sorted({int(r["sell_date"].year) for r in all_sold_rows}, reverse=True)
+    if not all_years and year is None and sold_years:
+        year = sold_years[0]
+    sold_rows = [r for r in all_sold_rows if year is None or r["sell_date"].year == year]
     sold_closes = _latest_closes(conn, list({str(r["code"]) for r in sold_rows}), None)
     sold: list[SoldRow] = []
     sold_buy = Decimal(0)
@@ -289,7 +326,10 @@ def get_holdings(
         groups=groups,
         totals=totals,
         sold=sold if include_sold else [],
-        sold_count=len(sold),
+        sold_count=len(all_sold_rows),
+        sold_years=sold_years,
+        sold_year=year,
+        sold_shown_count=len(sold),
         sold_pnl_amount=float(sold_sell - sold_buy),
         sold_buy_amount=float(sold_buy),
         sold_sell_amount=float(sold_sell),

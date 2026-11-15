@@ -479,9 +479,9 @@ def test_通知メールの内容(notify_data: psycopg.Connection[DictRow], smtp
     assert "注意: 上昇確率" not in html_body
     assert "上昇確率は予測であり、値上がりを保証するものではありません。" in html_body
     # テキストの本文
-    assert "1. 1111 □□商事(プライム) 業種 卸売業 現在値 850" in text
+    assert "1. 1111 □□商事(プライム) 業種 卸売業 予測日の株価 850" in text
     assert "■ 買い候補(業種分散。同じ33業種は3銘柄まで、上位30銘柄)(並べ方は買い候補と同じ)" in text
-    assert "2. 3333 ☆☆建設 業種 建設業 現在値 850" in text
+    assert "2. 3333 ☆☆建設 業種 建設業 予測日の株価 850" in text
     sector_text = text[text.index("■ 買い候補(業種分散") : text.index("■ 保有銘柄")]
     assert "3. 5555 ○○フーズ(グロース) 業種 食料品" in sector_text and "△△電機" not in sector_text
     assert "3333 ☆☆建設 / 買値" in text  # 市場が分からない銘柄は何も付けない

@@ -17,6 +17,20 @@ export interface WebSettings {
   runs_default_days: number;
   runs_page_size: number;
   screen_page_size: number;
+  /** 検討中銘柄: メモの最大の文字数 */
+  watch_stock_memo_max_length: number;
+  /** 的中率: 期間のタブ(この順)。銘柄別・業種別の的中率の期間の初期値、銘柄別の件数の下限と1回の件数 */
+  accuracy_periods: string[];
+  accuracy_breakdown_default_period: string;
+  accuracy_stock_min_count_all: number;
+  accuracy_stock_min_count_top: number;
+  accuracy_stock_page_size: number;
+  /** 的中率: 銘柄別・業種別の予想の向きの選択肢(up: 上昇予想、down: 下降予想。この順)と初期値 */
+  accuracy_directions: Record<string, string>;
+  accuracy_direction_default: string;
+  /** ランキング: 1回の件数と、「買い候補の常連」で数える予測日の数 */
+  ranking_page_size: number;
+  ranking_regular_days: number;
   run_status_labels: Record<string, string>;
   batch_type_labels: Record<string, string>;
 }
@@ -368,8 +382,16 @@ export interface HoldingsResponse {
   judge_date: string | null;
   groups: HoldingGroup[];
   totals: { cost: number; value: number; pnl_amount: number; pnl_rate: number | null };
+  /** 売却済みの行。sold と下の合計は、売却年(sold_year)で絞り込んだ後の行のもの */
   sold: SoldRow[];
+  /** 売却済みの全件の件数(絞り込む前。タブの件数に使う) */
   sold_count: number;
+  /** 売却日の年の一覧(重複なし、降順) */
+  sold_years: number[];
+  /** 実際に使った売却年(全て・0件のときは null) */
+  sold_year: number | null;
+  /** 絞り込んだ後の売却済みの行数 */
+  sold_shown_count: number;
   sold_pnl_amount: number;
   /** 売却済みの買値の合計・売値の合計(値 × 売り株数の合計)と、損益(%)= 損益 ÷ 買値の合計 */
   sold_buy_amount: number;
@@ -533,7 +555,7 @@ export interface Option {
   label: string;
 }
 
-/** 銘柄の検索の1銘柄 */
+/** 銘柄検索の1銘柄 */
 export interface ScreenRow {
   rank: number | null;
   code: string;
@@ -559,4 +581,213 @@ export interface ScreenResponse {
   sector_options: Option[];
   note_options: Option[];
   exclude_options: Option[];
+}
+
+/** GET /api/watch-stocks/codes(検討中銘柄に追加済みの銘柄のコードとメモ) */
+export interface WatchCodesResponse {
+  items: { code: string; memo: string }[];
+}
+
+/** 検討中銘柄の、ある予測日の時点の値(追加した日、または最新の予測日)。close はその予測日の終値 */
+export interface WatchPoint {
+  pred_date: string | null;
+  close: number | null;
+  /** その予測日の予測にその銘柄があるか(ないときは horizons の値が全て null) */
+  has_prediction: boolean;
+  horizons: HorizonValue[];
+  notes: Note[];
+}
+
+/** 検討中銘柄の1銘柄。change_rate は値上がり率(latest の終値 ÷ picked の終値 − 1) */
+export interface WatchStockRow {
+  code: string;
+  name: string;
+  market: string;
+  sector33: string;
+  memo: string;
+  created_at: string;
+  updated_at: string;
+  picked: WatchPoint;
+  latest: WatchPoint;
+  change_rate: number | null;
+}
+
+/** GET /api/watch-stocks */
+export interface WatchStocksResponse {
+  latest_pred_date: string | null;
+  rows: WatchStockRow[];
+}
+
+/** PUT・DELETE /api/watch-stocks/{code} の返り値 */
+export interface WatchSaved {
+  code: string;
+  created: boolean;
+  message: string;
+}
+
+/** 業績の前年比(kind は percent・to_profit・to_loss・loss_shrink・loss_expand・none。rate は percent のときだけ) */
+export interface YoY {
+  kind: string;
+  rate: number | null;
+}
+
+/** 業績の表の1行(金額は円。四半期は期首からの累計。eps は株式分割を補正した値) */
+export interface FinancialRow {
+  period_label: string;
+  per_type: string;
+  fy_end: string;
+  disc_date: string;
+  sales: number | null;
+  sales_yoy: YoY;
+  op: number | null;
+  op_yoy: YoY;
+  np: number | null;
+  np_yoy: YoY;
+  op_margin: number | null;
+  eps: number | null;
+}
+
+/** 会社予想の1項目(key は sales・op・np・eps・div。direction は up・down) */
+export interface ForecastItem {
+  key: string;
+  value: number | null;
+  prev_value: number | null;
+  direction: string | null;
+  revised_date: string | null;
+}
+
+/** 会社予想(今期・来期) */
+export interface Forecast {
+  fy_end: string;
+  period_label: string;
+  next_period_label: string;
+  disc_date: string;
+  current: ForecastItem[];
+  next: ForecastItem[];
+}
+
+/** 今の事業年度の予想の履歴の1行(direction は up・down・mixed) */
+export interface RevisionRow {
+  disc_date: string;
+  doc_kind: string;
+  sales: number | null;
+  op: number | null;
+  np: number | null;
+  sales_direction: string | null;
+  op_direction: string | null;
+  np_direction: string | null;
+  direction: string | null;
+}
+
+/** 予想の配当利回りの元の値 */
+export interface DividendInfo {
+  dividend: number;
+  price: number;
+  price_date: string;
+  disc_date: string;
+  is_next: boolean;
+}
+
+/** GET /api/stocks/{code}/financials(銘柄詳細の業績) */
+export interface FinancialsResponse {
+  code: string;
+  annual: FinancialRow[];
+  quarterly: FinancialRow[];
+  forecast: Forecast | null;
+  revisions: RevisionRow[];
+  dividend_yield: number | null;
+  dividend: DividendInfo | null;
+}
+
+/** 銘柄別の的中率の1銘柄 */
+export interface StockAccuracyRow {
+  rank: number;
+  code: string;
+  name: string;
+  market: string;
+  sector33: string;
+  verified_count: number;
+  hit_rate: number | null;
+  beat_rate: number | null;
+  avg_change_rate: number | null;
+  avg_price_error_rate: number | null;
+}
+
+/** GET /api/accuracy/stocks(集計がまだなければ summary_date は null で、rows は空) */
+export interface StockAccuracyResponse {
+  summary_date: string | null;
+  horizon: number;
+  period: string;
+  period_start: string | null;
+  segment: string;
+  /** 予想の向き(up: 上がると予想した日だけ、down: 下がると予想した日だけ) */
+  direction: string;
+  min_count: number;
+  total: number;
+  offset: number;
+  has_more: boolean;
+  sort: string;
+  order: string;
+  rows: StockAccuracyRow[];
+}
+
+/** 業種別の的中率の、全銘柄か買い候補の値 */
+export interface SectorAccuracyValues {
+  verified_count: number;
+  hit_rate: number | null;
+  beat_rate: number | null;
+  avg_change_rate: number | null;
+}
+
+/** 業種別の的中率の1業種 */
+export interface SectorAccuracyRow {
+  sector33_code: string | null;
+  sector33: string;
+  all: SectorAccuracyValues;
+  top: SectorAccuracyValues;
+}
+
+/** GET /api/accuracy/sectors */
+export interface SectorAccuracyResponse {
+  summary_date: string | null;
+  horizon: number;
+  period: string;
+  period_start: string | null;
+  direction: string;
+  rows: SectorAccuracyRow[];
+}
+
+/** ランキングの1銘柄。value はランキングの値、sub_value は「買い候補の常連」の平均順位 */
+export interface RankingRow {
+  rank: number;
+  code: string;
+  name: string;
+  market: string;
+  sector33: string;
+  value: number;
+  sub_value: number | null;
+  base_price: number;
+  horizons: HorizonValue[];
+  fwd_per: number | null;
+  pbr: number | null;
+  avg_turnover: number | null;
+  notes: Note[];
+}
+
+/** GET /api/rankings */
+export interface RankingsResponse {
+  pred_date: string;
+  type: string;
+  horizon: number;
+  /** 「確率が急に上がった銘柄」で比べた、前の予測日(なければ null) */
+  prev_pred_date: string | null;
+  /** 「買い候補の常連」で数えた予測日の数 */
+  regular_days: number;
+  code_count: number;
+  total: number;
+  offset: number;
+  has_more: boolean;
+  rows: RankingRow[];
+  market_options: string[];
+  sector_options: Option[];
 }

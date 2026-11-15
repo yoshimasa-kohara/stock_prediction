@@ -30,19 +30,23 @@ describe("App(画面全体)", () => {
     ["/runs", "実行履歴"],
     ["/candidates", "買い候補"],
     ["/candidates/results", "買い候補と実際の株価"],
-    ["/search", "銘柄の検索"],
+    ["/search", "銘柄検索"],
     ["/holdings", "保有銘柄"],
+    ["/watch-stocks", "検討中銘柄"],
     ["/accuracy", "的中率"],
-  ])("%s は「%s」の画面を出す", async (path, title) => {
+    ["/accuracy/compare", "精度の比較"],
+  ])("%s は「%s」の画面を出し、タブの title を「株価予測-画面名」にする", async (path, title) => {
     mockFetch({ "/api/settings": { body: SETTINGS }, "/api/status": { body: STATUS } });
     renderApp(path);
     expect(await screen.findByRole("heading", { level: 1, name: title })).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe(`株価予測-${title}`));
   });
 
   it("知らない URL は「画面が見つかりません」", async () => {
     mockFetch({ "/api/settings": { body: SETTINGS }, "/api/status": { body: STATUS } });
     renderApp("/nothing");
     expect(await screen.findByRole("heading", { name: "画面が見つかりません" })).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("株価予測-画面が見つかりません"));
   });
 
   it("設定値を読めなければ、赤い枠でエラーを出す", async () => {

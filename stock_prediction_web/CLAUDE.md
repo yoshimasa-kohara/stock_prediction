@@ -1,6 +1,6 @@
 # 株価予測システムの画面(stock_prediction_web)
 
-予測の詳細、買い候補と実際の株価、保有銘柄の状態、的中率の推移を見る画面。保有銘柄の登録・売却もここで行う。
+予測の詳細、買い候補と実際の株価、保有銘柄の状態、的中率の推移を見る画面。保有銘柄の登録・売却、検討中銘柄(買うか迷っている銘柄)の追加・メモもここで行う。
 
 ## 構成
 
@@ -13,13 +13,15 @@
 - 買い候補の画面は、予測日の期間(開始日・終了日)で `/api/candidates/range` を呼び、予測日ごとに表示する(新しい日が上)。
   期間の初期値は、予測がある日を新しい順に `CANDIDATES_DEFAULT_DAYS` 日分(`src\lib\candidateRange.ts`)。1回に表示できるのは `CANDIDATES_RANGE_MAX_MONTHS` か月まで。
   日経平均のブロック(`src\components\LatestMarketBlock.tsx`)は、期間やタブに関係なく最新の日のものを出す
+- `screenshot\` : 画面イメージ(PNG)を撮る道具。架空の値をテスト用の DB に入れ(`make_sample_db.py`)、本物の画面を撮る(`capture.py`)。
+  画面を変えたら `npm run build` の後に `.venv\Scripts\python -m screenshot.capture` で撮り直す(使い方は `screenshot\README.md`)
 - `tests\` : API のテスト(pytest)。画面のテストは `frontend\src` の `*.test.ts(x)`(Vitest)
 
 ## バッチのコードの読み込み
 
 - `.venv\Lib\site-packages\stock_prediction_batch.pth` で、バッチのフォルダを読み込む。
   `const`、`common`、`core`、`tools` はバッチのもの。**web 側にこの名前のフォルダやファイルを作らない**(`tests` には `__init__.py` を置かない)
-- DB の接続はバッチの `common.db.connect`(同じ `.env`)。画面が書き込むのは holding(保有銘柄)だけ
+- DB の接続はバッチの `common.db.connect`(同じ `.env`)。画面が書き込むのは holding(保有銘柄)と watch_stock(検討中銘柄)だけ
 - 備考(流動性注意、クロス、トレンドラインの抜けなど)はバッチの core の関数で計算し、メールと同じ結果にする(色もメールと同じ)
 - 保有銘柄の合計(評価額・損益)は、メールと同じ `core.notify_core.holding_totals` で求める
 

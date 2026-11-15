@@ -1,4 +1,4 @@
-"""GET /api/screen(銘柄の検索)のテスト。"""
+"""GET /api/screen(銘柄検索)のテスト。"""
 
 import psycopg
 import pytest

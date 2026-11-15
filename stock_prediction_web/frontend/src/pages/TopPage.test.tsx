@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { vi } from "vitest";
 
@@ -31,6 +31,14 @@ const wholeText = (text: string) => (_: string, el: Element | null) => el?.tagNa
 
 describe("トップ", () => {
   beforeEach(() => resetChart());
+
+  it("上のカードは 最新の予測日・買い候補／保有銘柄・日次バッチ・週次バッチ の順。タブの title は「株価予測-トップ」", async () => {
+    renderTop();
+    await screen.findByText("3 件 / 2 件");
+    const labels = Array.from(document.querySelectorAll(".cards .card .lbl")).map((e) => e.textContent ?? "");
+    expect(labels).toEqual(["最新の予測日", "買い候補 / 保有銘柄", "日次バッチ", "週次バッチ"]);
+    await waitFor(() => expect(document.title).toBe("株価予測-トップ"));
+  });
 
   it("最新の予測日・バッチの結果・件数・上位5銘柄・保有銘柄・的中率を出す", async () => {
     const calls = renderApp("/", (p) => {
@@ -76,7 +84,7 @@ describe("トップ", () => {
     await screen.findByTestId("price-chart");
     expect(within(block).getByRole("heading", { level: 2 })).toHaveTextContent("日経平均(2026-07-22)");
     const warn = screen.getByText(/上昇確率のずれ\(直近3か月\)/);
-    const candidates = screen.getByRole("heading", { name: "買い候補(上位5銘柄)" });
+    const candidates = screen.getByRole("heading", { name: "買い候補(上位5銘柄。予測日 2026-07-22)" });
     expect(warn.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(block.compareDocumentPosition(candidates) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // 相場の状態・日経平均の向き・注意書きは、ブロックの中だけに出す(買い候補の表の上には出さない)
@@ -167,9 +175,21 @@ describe("トップ", () => {
     renderApp("/", (p) => (p === "/api/candidates" ? { body: CANDIDATES } : undefined));
     const link = await screen.findByRole("link", { name: "サンプル銀行A" });
     expect(link).toHaveAttribute("href", "/stocks/11110");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
     const table = link.closest("table");
     expect(table).not.toBeNull();
     expect(within(table!).getByText("20日後 市場比")).toBeInTheDocument();
     expect(within(table!).queryByText("5日後")).toBeNull();
+  });
+
+  it("買い候補の見出しに予測日を出し、表の列見出しは「予測日の株価」。保有銘柄の表は「現在値」のまま", async () => {
+    renderTop();
+    const heading = await screen.findByRole("heading", { name: "買い候補(上位5銘柄。予測日 2026-07-22)" });
+    const panel = heading.closest(".panel") as HTMLElement;
+    expect(within(panel).getByText("予測日の株価")).toBeInTheDocument();
+    expect(within(panel).queryByText("現在値")).toBeNull();
+    const holdingsPanel = screen.getByRole("heading", { name: "保有銘柄" }).closest(".panel") as HTMLElement;
+    expect(await within(holdingsPanel).findByText("現在値")).toBeInTheDocument();
   });
 });

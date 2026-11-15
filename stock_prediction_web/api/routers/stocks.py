@@ -4,6 +4,7 @@ GET /api/stocks/search: 銘柄コード(前方一致)・銘柄名(部分一致)�
 GET /api/stocks/{code}: 銘柄の情報、指標、次の決算発表予定日、備考
 GET /api/stocks/{code}/prices: 株式分割を調整した株価、移動平均、ボリンジャーバンド、トレンドライン
 GET /api/stocks/{code}/predictions: 最新の予測と、過去の予測と答え合わせ
+GET /api/stocks/{code}/financials: 業績(通期・四半期の表、会社予想と修正、予想の配当利回り。計算は api/financials.py)
 """
 
 import math
@@ -20,6 +21,7 @@ from api import web_const
 from api.common import Note, check_horizon, check_range, latest_pred_date, to_float
 from api.deps import Conn
 from api.errors import ApiError
+from api.financials import FinancialsResponse, build_financials
 from api.logger import log_api
 from api.notes import stock_notes, to_notes
 from common.business_day import list_business_days_by_rule
@@ -549,3 +551,16 @@ def get_predictions(
         ],
         history_limit=web_const.STOCK_PREDICTION_HISTORY_LIMIT,
     )
+
+
+# =====================================================================
+# 業績
+# =====================================================================
+
+
+@router.get("/api/stocks/{code}/financials", response_model=FinancialsResponse)
+@log_api
+def get_financials(conn: Conn, code: str) -> FinancialsResponse:
+    """銘柄詳細の業績。銘柄がなければ 404。開示がなければ空で返す(404 にしない)。"""
+    load_master(conn, code)
+    return build_financials(conn, code)

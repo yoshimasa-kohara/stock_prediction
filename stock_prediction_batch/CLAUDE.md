@@ -53,6 +53,7 @@
 - 買い候補は2つ。買い候補(`buy_rank`。上位 `BUY_CANDIDATE_COUNT` 件)と、買い候補(業種分散。`buy_rank_sector`。同じ33業種は `SECTOR_CAP_PER_SECTOR` 銘柄まで)。
   条件を満たす銘柄が足りない日は、上昇確率の条件を上位 `BUY_CANDIDATE_FALLBACK_TOP_RATE` に置き換えて選び直す
 - 画面とメールの銘柄コードは `common\stock_code.py` の `display_code` で出す(5桁目が 0 なら4桁。DB は5桁のまま)
+- 検討中銘柄(watch_stock)は画面だけが読み書きする。メールとバッチの処理には使わない
 - 保有銘柄(holding)は購入ごとに1行。メールでは銘柄ごとにまとめて平均買値で表示・判定する(`core\notify_core.py` の `average_buy_price`)。
   購入ごとの行は `HoldingLot`(購入日の古い順)。保有中の合計(評価額・損益)は `holding_totals` で求め、画面の保有銘柄も同じ関数を使う。現在値がない銘柄は評価額と損益に入れない
 - 備考の色: 流動性注意は緑(`COLOR_QUIET`)、「MM/DD の終値」は橙(`COLOR_CAUTION`)、デッドクロス・赤字予想・下値支持線の下抜けは青、それ以外は赤。画面(web の `api\notes.py`)もメールと同じ色にする

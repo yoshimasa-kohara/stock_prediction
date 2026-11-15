@@ -25,6 +25,7 @@ import {
   parseKind,
 } from "../lib/candidateKind";
 import { formatDateWithWeekday, formatInteger } from "../lib/format";
+import { usePageTitle } from "../lib/usePageTitle";
 
 /** 自動スクロールの行き先(表の上の説明文)の id。styles.css の scroll-margin-top の対象と合わせる */
 const CANDIDATES_TOP_ID = "candidates-top";
@@ -55,12 +56,14 @@ function DaySection({
         mainHorizon={main}
         emptyMessage="買い候補はありません"
         showSector
+        showWatch
       />
     </section>
   );
 }
 
 export default function CandidatesPage() {
+  usePageTitle("買い候補");
   const settings = useSettings();
   const [params, setParams] = useSearchParams();
   const kind = parseKind(params.get("kind"));
@@ -188,7 +191,7 @@ export default function CandidatesPage() {
         日後、緑の見出し)の市場比の確率が高い順。
         {kind === "sector" &&
           `同じ33業種の銘柄は上から${settings.batch.sector_cap_per_sector}銘柄までにする(業種は予測した時点の33業種)。`}
-        銘柄名を選ぶと銘柄詳細へ移る。予測のない日(土日・祝日など)は表がありません。
+        銘柄名を選ぶと銘柄詳細へ移る。銘柄名の左の「☆」で検討中銘柄に追加する(追加済みは「★」)。予測のない日(土日・祝日など)は表がありません。
       </p>
       {dates.error && <ErrorMessage message={dates.error} />}
       {res.error && <ErrorMessage message={res.error} />}

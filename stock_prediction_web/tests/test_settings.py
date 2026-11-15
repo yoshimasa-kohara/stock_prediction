@@ -27,6 +27,16 @@ def test_settings_returns_web_and_batch_values(client: TestClient) -> None:
     assert web["runs_default_days"] == web_const.RUNS_DEFAULT_DAYS
     assert web["runs_page_size"] == web_const.RUNS_PAGE_SIZE
     assert web["screen_page_size"] == web_const.SCREEN_PAGE_SIZE
+    assert web["watch_stock_memo_max_length"] == web_const.WATCH_STOCK_MEMO_MAX_LENGTH
+    assert web["accuracy_periods"] == list(web_const.ACCURACY_RANK_PERIODS)
+    assert web["accuracy_breakdown_default_period"] == web_const.ACCURACY_BREAKDOWN_DEFAULT_PERIOD
+    assert web["accuracy_stock_min_count_all"] == web_const.ACCURACY_STOCK_MIN_COUNT_ALL
+    assert web["accuracy_stock_min_count_top"] == web_const.ACCURACY_STOCK_MIN_COUNT_TOP
+    assert web["accuracy_stock_page_size"] == web_const.ACCURACY_STOCK_PAGE_SIZE
+    assert web["accuracy_directions"] == {"up": "上昇予想", "down": "下降予想"}
+    assert web["accuracy_direction_default"] == "up"
+    assert web["ranking_page_size"] == web_const.RANKING_PAGE_SIZE
+    assert web["ranking_regular_days"] == web_const.RANKING_REGULAR_DAYS
     assert web["run_status_labels"]["FAILED"] == "失敗"
     assert web["batch_type_labels"]["SINGLE"] == "単独で起動"
     batch = body["batch"]

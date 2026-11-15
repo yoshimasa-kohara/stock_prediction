@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
-import { PREDICTIONS, PRICES, STOCK } from "../test/apiData";
+import { FINANCIALS, FINANCIALS_EMPTY, PREDICTIONS, PRICES, STOCK } from "../test/apiData";
 import { chartState, resetChart } from "../test/chartMock";
 import { type Handler, renderPage, urlsOf } from "../test/renderApp";
 import StockDetailPage from "./StockDetailPage";
@@ -14,6 +14,7 @@ function handler(over: Partial<Record<string, unknown>> = {}) {
     if (p === "/api/stocks/11110") return { body: { ...STOCK, ...over } };
     if (p === "/api/stocks/11110/prices") return { body: { ...PRICES, period: q.get("period") } };
     if (p === "/api/stocks/11110/predictions") return { body: PREDICTIONS };
+    if (p === "/api/stocks/11110/financials") return { body: FINANCIALS };
     return undefined;
   };
 }
@@ -30,9 +31,13 @@ describe("銘柄詳細", () => {
 
   it("銘柄の情報・数字のカード・備考・最新の予測・過去の予測を出す", async () => {
     renderAt("/stocks/11110", handler());
-    expect(await screen.findByRole("heading", { level: 1, name: /1111 サンプル銀行A/ })).toHaveTextContent(
-      "プライム ／ 銀行業 ／ TOPIX Small 1",
-    );
+    // h1 は「銘柄詳細」。コード・銘柄名・市場／業種／規模は h1 のすぐ下の行に出す
+    await screen.findByText("3,945.0");
+    const h1 = screen.getByRole("heading", { level: 1, name: "銘柄詳細" });
+    const line = h1.nextElementSibling as HTMLElement;
+    expect(line).toHaveClass("h1line");
+    expect(line).toHaveTextContent("1111 サンプル銀行A");
+    expect(line).toHaveTextContent("プライム ／ 銀行業 ／ TOPIX Small 1");
     expect(screen.getByText("3,945.0")).toBeInTheDocument();
     expect(screen.getByText("前日比 +59.2(+1.5%)")).toHaveClass("up");
     expect(screen.getByText("7.9倍 ／ 0.46倍")).toBeInTheDocument();
@@ -45,7 +50,7 @@ describe("銘柄詳細", () => {
     const heads = Array.from(latest.querySelectorAll("thead th")).map((th) => th.textContent);
     expect(heads).toEqual([
       "予測日",
-      "予測日の終値",
+      "予測日の株価",
       "買い候補の順位",
       "5日後 上昇確率",
       "5日後 見込み",
@@ -209,9 +214,12 @@ describe("銘柄詳細", () => {
         };
       }
       if (p === "/api/stocks/11110/prices") return { body: { ...PRICES, rows: [] } };
+      if (p === "/api/stocks/11110/financials") return { body: FINANCIALS_EMPTY };
       return undefined;
     });
     expect(await screen.findByText(/予測の対象ではありません/)).toBeInTheDocument();
+    // 予測の対象でない銘柄(ETF など)にも、業績のブロックを出す(データがなければその旨)
+    expect(await screen.findByText("業績のデータがありません")).toBeInTheDocument();
     expect(screen.getByText("予定日はまだ公表されていません")).toBeInTheDocument();
     expect(screen.getByText("備考はありません")).toBeInTheDocument();
     expect(await screen.findByText("株価がありません")).toBeInTheDocument();
@@ -235,12 +243,73 @@ describe("銘柄詳細", () => {
 
   it("銘柄がなければエラーを出す。予測・株価を読めなければ、それぞれエラーを出す", async () => {
     renderAt("/stocks/99990", (p) => (p === "/api/stocks/99990" ? { status: 404, body: { detail: "銘柄が見つかりません" } } : undefined));
-    expect(await screen.findByRole("heading", { level: 1, name: "銘柄詳細 9999" })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("銘柄が見つかりません");
+    const h1 = screen.getByRole("heading", { level: 1, name: "銘柄詳細" });
+    expect(h1.nextElementSibling).toHaveTextContent("9999");
+    await waitFor(() => expect(document.title).toBe("株価予測-銘柄詳細-9999"));
     expect(screen.getByRole("alert")).toHaveTextContent("銘柄が見つかりません");
   });
 
-  it("予測・株価を読めなければ、それぞれエラーを出す", async () => {
+  it("カードは 終値・次の決算発表予定日・PER／PBR・ROE／予想EPS の順に並ぶ", async () => {
+    renderAt("/stocks/11110", handler());
+    await screen.findByText("3,945.0");
+    const labels = Array.from(document.querySelectorAll(".cards .card .lbl")).map((e) => e.textContent ?? "");
+    expect(labels[0]).toMatch(/^終値/);
+    expect(labels.slice(1)).toEqual(["次の決算発表予定日", "PER(予想) ／ PBR", "ROE(実績) ／ 予想EPS"]);
+  });
+
+  it("読み込み中は「株価予測-銘柄詳細-1111」(コード)、読み込み後は「株価予測-銘柄詳細-サンプル銀行A」(銘柄名)。h1 は「銘柄詳細」のまま", async () => {
+    renderAt("/stocks/11110", handler());
+    // h1 が最初に出るのは読み込み中の描画(データが来る前)
+    expect(await screen.findByRole("heading", { level: 1, name: "銘柄詳細" })).toBeInTheDocument();
+    expect(document.querySelector(".loading")).not.toBeNull();
+    expect(document.title).toBe("株価予測-銘柄詳細-1111");
+    await screen.findByText("3,945.0");
+    expect(document.title).toBe("株価予測-銘柄詳細-サンプル銀行A");
+  });
+
+  it("予測・株価・業績を読めなければ、それぞれエラーを出す", async () => {
     renderAt("/stocks/11110", (p) => (p === "/api/stocks/11110" ? { body: STOCK } : { status: 503, body: { detail: "DB に接続できません" } }));
-    await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(3));
+  });
+
+  it("業績のブロックは「最新の予測」と「過去の予測と答え合わせ」の間に出す。/api/stocks/{code} とは別に読む", async () => {
+    const calls = renderAt("/stocks/11110", handler());
+    await screen.findByRole("table", { name: "業績(四半期・累計)" });
+    await screen.findByRole("heading", { name: "過去の予測と答え合わせ" });
+    const titles = Array.from(document.querySelectorAll(".panel h2")).map((h) => h.textContent);
+    expect(titles.slice(-3)).toEqual(["最新の予測", "業績(四半期・累計)", "過去の予測と答え合わせ"]);
+    expect(urlsOf(calls, "/api/stocks/11110/financials")).toEqual(["/api/stocks/11110/financials"]);
+  });
+
+  it("予測を読み込んでいる間・読めなかったときも、業績のブロックは出す", async () => {
+    renderAt("/stocks/11110", (p) => {
+      if (p === "/api/stocks/11110") return { body: STOCK };
+      if (p === "/api/stocks/11110/financials") return { body: FINANCIALS };
+      return { status: 503, body: { detail: "DB に接続できません" } };
+    });
+    expect(await screen.findByRole("table", { name: "業績(四半期・累計)" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "最新の予測" })).toBeNull();
+  });
+
+  it("銘柄名の横に、検討中銘柄のボタン(☆・★)を出す。追加すると ★ になる", async () => {
+    const user = userEvent.setup();
+    let added = false;
+    const base = handler();
+    const calls = renderAt("/stocks/11110", (p, q, m) => {
+      if (p === "/api/watch-stocks/codes") return { body: { items: added ? [{ code: "11110", memo: "" }] : [] } };
+      if (m === "PUT") {
+        added = true;
+        return { body: { code: "11110", created: true, message: "検討中銘柄に追加しました" } };
+      }
+      return base(p, q);
+    });
+    const star = await screen.findByRole("button", { name: "サンプル銀行Aを検討中銘柄に追加" });
+    expect(star).toHaveTextContent("☆");
+    expect(star.closest("p")).toHaveClass("h1line");
+    await user.click(star);
+    await user.click(within(screen.getByRole("dialog", { name: "検討中銘柄に追加" })).getByRole("button", { name: "追加" }));
+    expect(await screen.findByRole("button", { name: "サンプル銀行Aの検討中銘柄のメモを編集" })).toHaveTextContent("★");
+    expect(calls.filter((c) => c.method === "PUT").map((c) => c.url)).toEqual(["/api/watch-stocks/11110"]);
   });
 });

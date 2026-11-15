@@ -8,3 +8,5 @@ types-requests==2.33.0.20261006
 pandas-stubs==3.0.5.260914
 # API のテストで使う(FastAPI の TestClient が使う。starlette 1.x は httpx ではなく httpx2 を使う)
 httpx2==2.16.0
+# 画面イメージを撮る(screenshot/capture.py)。入れた後に .venv\Scripts\python -m playwright install chromium
+playwright==1.65.2

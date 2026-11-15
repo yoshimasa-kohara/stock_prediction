@@ -9,6 +9,7 @@ import {
   INDEX_TREND_TEXT,
   MARKET_STATE_WITH_TREND,
   PRED_DATES,
+  WATCH_CODES,
 } from "../test/apiData";
 import { resetChart } from "../test/chartMock";
 import { type Handler, renderApp, urlsOf } from "../test/renderApp";
@@ -558,5 +559,32 @@ describe("買い候補: 表の上の説明文への自動スクロール", () =>
     );
     await screen.findByRole("alert");
     expect(scroll).not.toHaveBeenCalled();
+  });
+
+  it("買い候補・業種分散のどちらのタブにも、検討中銘柄のボタン(☆・★)を銘柄名の左に出す", async () => {
+    const user = userEvent.setup();
+    const base = rangeHandler([day("2026-07-22")]);
+    renderApp("/candidates", (p, q, m, b) =>
+      p === "/api/watch-stocks/codes" ? { body: WATCH_CODES } : base(p, q, m, b),
+    );
+    for (const heading of [/の買い候補/, /の買い候補\(業種分散\)/]) {
+      await screen.findByRole("heading", { level: 2, name: heading });
+      const added = await screen.findByRole("button", {
+        name: "サンプル商事Aの検討中銘柄のメモを編集",
+      });
+      expect(added).toHaveTextContent("★");
+      const star = screen.getByRole("button", {
+        name: "サンプル銀行Aを検討中銘柄に追加",
+      });
+      expect(star).toHaveTextContent("☆");
+      expect(star.closest("td")).toHaveClass("fix");
+      await user.click(screen.getByRole("tab", { name: "買い候補(業種分散)" }));
+    }
+    await user.click(
+      screen.getByRole("button", { name: "サンプル銀行Aを検討中銘柄に追加" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "検討中銘柄に追加" }),
+    ).toBeInTheDocument();
   });
 });

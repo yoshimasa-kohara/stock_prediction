@@ -43,10 +43,11 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
 python_version = "3.13"
 strict = true
 warn_unreachable = true
-# テストのコードも型ヒントを検査する
-files = ["api", "tests"]
-# バッチのコード(const・common・core・tools)の場所。実行するときは .pth で読み込むが、mypy にはここで教える
-mypy_path = "../stock_prediction_batch"
+# テストのコードと、画面イメージの撮影の道具(screenshot)も型ヒントを検査する
+files = ["api", "tests", "screenshot"]
+# バッチのコード(const・common・core・tools)の場所。実行するときは .pth で読み込むが、mypy にはここで教える。
+# tests は、screenshot が tests/web_sample.py を読むため
+mypy_path = "../stock_prediction_batch:tests"
 
 [[tool.mypy.overrides]]
 # バッチのコードは、バッチ側で検査する(ここでは型の情報として使うだけ)

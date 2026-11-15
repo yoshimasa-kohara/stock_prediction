@@ -1,7 +1,7 @@
 """株価予測システムの画面(stock_prediction_web)の API と、画面の配信。
 
-1つのプロセス・1つのポート(8080)で、/api/... の API と、画面をビルドした静的ファイル(frontend/dist)を返す
-。/api/ 以外のパスは全て画面の index.html を返し、画面の中で React Router が表示を切り替える。
+1つのプロセス・1つのポート(8080)で、/api/... の API と、画面をビルドした静的ファイル(frontend/dist)を返す。
+/api/ 以外のパスは全て画面の index.html を返し、画面の中で React Router が表示を切り替える。
 """
 
 from pathlib import Path
@@ -13,7 +13,19 @@ from starlette.responses import Response
 from api import web_const
 from api.errors import error_response, register_error_handlers
 from api.logger import log_api, setup_logging
-from api.routers import accuracy, candidates, holdings, index, runs, screen, settings, status, stocks
+from api.routers import (
+    accuracy,
+    candidates,
+    holdings,
+    index,
+    rankings,
+    runs,
+    screen,
+    settings,
+    status,
+    stocks,
+    watch_stocks,
+)
 
 # stock_prediction_web のフォルダ(このファイルの1つ上)
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
@@ -54,7 +66,9 @@ def create_app() -> FastAPI:
     )
     setup_logging()
     register_error_handlers(app)
-    for module in (settings, status, runs, candidates, stocks, index, holdings, accuracy, screen):
+    for module in (
+        settings, status, runs, candidates, stocks, index, holdings, watch_stocks, accuracy, screen, rankings,
+    ):  # fmt: skip
         app.include_router(module.router)
 
     # /api/ で始まる、存在しないパスは 404(画面の index.html を返さない)

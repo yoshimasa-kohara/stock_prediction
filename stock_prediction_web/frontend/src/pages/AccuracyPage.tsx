@@ -4,6 +4,7 @@ import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, X
 
 import type { AccuracyResponse, DailyResponse } from "../api/types";
 import { useApi } from "../api/useApi";
+import { SectorAccuracyPanel, StockAccuracyPanel } from "../components/AccuracyBreakdown";
 import AccuracyTables, { RankAccuracyPanel } from "../components/AccuracyTables";
 import DateInput from "../components/DateInput";
 import ErrorMessage from "../components/ErrorMessage";
@@ -11,6 +12,7 @@ import Tabs from "../components/Tabs";
 import { useSettings } from "../context/contexts";
 import { gapPoints } from "../lib/calibration";
 import { formatInteger, formatPercent, formatSignedPercent } from "../lib/format";
+import { usePageTitle } from "../lib/usePageTitle";
 
 /** グラフの色(画面見本と同じ) */
 const RED = "#c00000";
@@ -74,6 +76,7 @@ function DailyChart({ horizon }: { horizon: number }) {
 }
 
 export default function AccuracyPage() {
+  usePageTitle("的中率");
   const settings = useSettings();
   const { main_horizon: main, predict_horizons: horizons } = settings.batch;
   const [horizon, setHorizon] = useState(String(main));
@@ -171,6 +174,14 @@ export default function AccuracyPage() {
               {Math.round(settings.batch.calibration_warn_gap * 100)}ポイントより大きい帯(メールの注意と同じ条件)
             </p>
           </div>
+        </>
+      )}
+      {/* 銘柄別・業種別の的中率。期間のタブを残すため、上の表の読み込みとは別に置く。
+          期間のタブは表ごとに別に持ち、タブを開いたときに、その期間の分だけ読む */}
+      {!res.error && data?.summary_date !== null && (
+        <>
+          <StockAccuracyPanel date={date} horizon={h} />
+          <SectorAccuracyPanel date={date} horizon={h} />
         </>
       )}
       {/* 予測日数のタブを変えても読み直さず、期間のタブを残すため、上の表の読み込みとは別に置く */}

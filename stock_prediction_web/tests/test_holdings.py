@@ -37,6 +37,8 @@ def test_holdings_empty(client: TestClient, sample: psycopg.Connection[DictRow])
     # 売却済みの行がないときの合計(保有中の合計と同じく 0 円、損益(%)は None)
     assert (body["sold_buy_amount"], body["sold_sell_amount"], body["sold_pnl_amount"]) == (0.0, 0.0, 0.0)
     assert body["sold_pnl_rate"] is None
+    # 売却済みが0件なら、売却年では絞り込まない
+    assert (body["sold_years"], body["sold_year"], body["sold_shown_count"]) == ([], None, 0)
 
 
 def test_holdings_no_prediction_yet(client: TestClient, conn: psycopg.Connection[DictRow]) -> None:
@@ -303,3 +305,79 @@ def test_holdings_sold_amounts(client: TestClient, sample: psycopg.Connection[Di
     sold = {s["code"]: s for s in client.get("/api/holdings").json()["sold"]}
     assert (sold["11130"]["buy_amount"], sold["11130"]["sell_amount"]) == (200000, 220000)
     assert (sold["11120"]["buy_amount"], sold["11120"]["sell_amount"]) == (100000, 100000)
+
+
+def _add_sold_years(conn: psycopg.Connection[DictRow]) -> dict[str, int]:
+    """売却年が 2024・2025(2行)・2026 の売却済みの行と、保有中の行を1つ入れる。"""
+    ids = {
+        "2024": add_holding(conn, "11110", "1000", 100, date(2024, 3, 1), date(2024, 12, 31), "1100"),
+        "2025a": add_holding(conn, "11120", "500", 200, date(2024, 12, 2), date(2025, 1, 1), "450"),
+        "2025b": add_holding(conn, "11130", "2000", 100, date(2025, 4, 14), date(2025, 12, 31), "2300"),
+        "2026": add_holding(conn, "11110", "1000", 300, date(2025, 11, 4), date(2026, 6, 12), "1200"),
+    }
+    add_holding(conn, "11120", "5000", 200, date(2026, 6, 15))
+    return ids
+
+
+def test_holdings_sold_year_default(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """sold_year を省略すると、売却日の最新の年で絞り込む。sold_count は全件のまま。"""
+    ids = _add_sold_years(sample)
+    body = client.get("/api/holdings").json()
+    assert body["sold_years"] == [2026, 2025, 2024]
+    assert body["sold_year"] == 2026
+    assert [s["holding_id"] for s in body["sold"]] == [ids["2026"]]
+    assert body["sold_shown_count"] == 1
+    assert body["sold_count"] == 4
+    assert body["sold_buy_amount"] == pytest.approx(1000 * 300)
+    assert body["sold_sell_amount"] == pytest.approx(1200 * 300)
+    assert body["sold_pnl_amount"] == pytest.approx(200 * 300)
+    assert body["sold_pnl_rate"] == pytest.approx(0.2)
+    # 保有中の内容は変わらない
+    assert [g["code"] for g in body["groups"]] == ["11120"]
+
+
+def test_holdings_sold_year_all(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """sold_year=all は年で絞り込まない(sold_year は None)。並びは売却日の新しい順。"""
+    ids = _add_sold_years(sample)
+    body = client.get("/api/holdings?sold_year=all").json()
+    assert body["sold_year"] is None
+    assert body["sold_years"] == [2026, 2025, 2024]
+    assert [s["holding_id"] for s in body["sold"]] == [ids["2026"], ids["2025b"], ids["2025a"], ids["2024"]]
+    assert (body["sold_shown_count"], body["sold_count"]) == (4, 4)
+    buy = 1000 * 100 + 500 * 200 + 2000 * 100 + 1000 * 300
+    sell = 1100 * 100 + 450 * 200 + 2300 * 100 + 1200 * 300
+    assert body["sold_buy_amount"] == pytest.approx(buy)
+    assert body["sold_sell_amount"] == pytest.approx(sell)
+    assert body["sold_pnl_amount"] == pytest.approx(sell - buy)
+    assert body["sold_pnl_rate"] == pytest.approx((sell - buy) / buy)
+
+
+def test_holdings_sold_year_specified(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """指定した年(1月1日〜12月31日)に売った行だけを返し、合計もその行で計算する。"""
+    ids = _add_sold_years(sample)
+    body = client.get("/api/holdings?sold_year=2025").json()
+    assert body["sold_year"] == 2025
+    # 1月1日と12月31日の行は入り、前の年の12月31日の行は入らない
+    assert [s["holding_id"] for s in body["sold"]] == [ids["2025b"], ids["2025a"]]
+    assert (body["sold_shown_count"], body["sold_count"]) == (2, 4)
+    buy = 500 * 200 + 2000 * 100
+    sell = 450 * 200 + 2300 * 100
+    assert body["sold_buy_amount"] == pytest.approx(buy)
+    assert body["sold_sell_amount"] == pytest.approx(sell)
+    assert body["sold_pnl_amount"] == pytest.approx(sell - buy)
+    assert body["sold_pnl_amount"] == pytest.approx(sum(r["pnl_amount"] for r in body["sold"]))
+    assert body["sold_pnl_rate"] == pytest.approx((sell - buy) / buy)
+    # 売却済みの行がない年は 0件(合計は 0、損益(%)は None)
+    none = client.get("/api/holdings?sold_year=2020").json()
+    assert (none["sold"], none["sold_year"], none["sold_shown_count"], none["sold_count"]) == ([], 2020, 0, 4)
+    assert (none["sold_buy_amount"], none["sold_pnl_rate"]) == (0.0, None)
+    # include_sold=false でも件数と年は返す
+    hidden = client.get("/api/holdings?include_sold=false&sold_year=2025").json()
+    assert (hidden["sold"], hidden["sold_shown_count"], hidden["sold_count"]) == ([], 2, 4)
+
+
+@pytest.mark.parametrize("value", ["", "ALL", "26", "20261", "2026年", "abcd", "-202", "２０２６"])
+def test_holdings_sold_year_bad(client: TestClient, sample: psycopg.Connection[DictRow], value: str) -> None:
+    res = client.get("/api/holdings", params={"sold_year": value})
+    assert res.status_code == 400
+    assert res.json() == {"detail": "売却年が正しくありません"}

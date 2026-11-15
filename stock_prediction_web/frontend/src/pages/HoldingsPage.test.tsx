@@ -4,7 +4,7 @@ import { vi } from "vitest";
 
 import { HOLDINGS } from "../test/apiData";
 import type { FakeResponse } from "../test/fixtures";
-import { renderApp } from "../test/renderApp";
+import { renderApp, urlsOf } from "../test/renderApp";
 
 const STOCKS = [
   { code: "11340", name: "サンプル工業B", market: "プライム", sector33: "機械" },
@@ -150,7 +150,13 @@ describe("保有銘柄", () => {
     expect(sent).toEqual([
       ["POST", "/api/holdings", { code: "11340", buy_price: 1234.5, quantity: 100, buy_date: "2026-07-01", note: "3回目" }],
     ]);
-    await waitFor(() => expect(calls.filter((c) => c.url === "/api/holdings" && c.method === "GET")).toHaveLength(2));
+    // 読み直しでは、今出している売却年(API が返した 2026)を保つ
+    await waitFor(() =>
+      expect(urlsOf(calls.filter((c) => c.method === "GET"), "/api/holdings")).toEqual([
+        "/api/holdings",
+        "/api/holdings?sold_year=2026",
+      ]),
+    );
   });
 
   it("候補が1つなら自動で選ぶ。API のエラーはダイアログに出す。「やめる」で閉じる", async () => {
@@ -298,7 +304,7 @@ describe("保有銘柄", () => {
       "損益(%)",
       "損益(円)",
     ]);
-    expect(heads.slice(-3)).toEqual(["判定", "備考", "操作"]);
+    expect(heads.slice(-4)).toEqual(["判定", "備考", "メモ", "操作"]);
     const rowCells = (name: string) =>
       Array.from(screen.getByText(name).closest("tr")!.querySelectorAll("td")).map((e) => e.textContent);
     // 合計の行(買い増し): 平均買値 × 合計の株数、現在値 × 合計の株数
@@ -360,18 +366,159 @@ describe("保有銘柄", () => {
       "売り株数",
       "売りの金額",
       "売却日",
-      "現在値",
       "損益(%)",
       "損益(円)",
       "保有した日数",
+      "メモ",
+      "現在値",
     ]);
     const cells = Array.from(screen.getByText("サンプル物産B").closest("tr")!.querySelectorAll("td")).map(
       (e) => e.textContent,
     );
     expect(cells[5]).toBe("152,000");
     expect(cells[9]).toBe("168,800");
+    // 保有した日数、メモ(なければ空)、現在値(一番右)
+    expect(cells.slice(13)).toEqual(["59日", "", "1,702.0"]);
     // 現在の金額の列は出さない
     expect(heads).not.toContain("現在の金額");
+  });
+
+  it("売却年のコンボボックス(先頭は「全て」、初期値は API が返した年)。選び直すと sold_year を付けて読み直す", async () => {
+    const user = userEvent.setup();
+    const calls = renderApp("/holdings", (p, q) => {
+      if (p !== "/api/holdings") return undefined;
+      const year = q.get("sold_year");
+      const base = { ...HOLDINGS, sold_count: 6, sold_years: [2026, 2025] };
+      if (year === "2025") return { body: { ...base, sold_year: 2025, sold_shown_count: 2 } };
+      if (year === "all") return { body: { ...base, sold_year: null, sold_shown_count: 6 } };
+      return { body: { ...base, sold_year: 2026, sold_shown_count: 4 } };
+    });
+    // 保有中のタブには出さない
+    await screen.findByText("判定の日: 2026-07-22(水)");
+    expect(screen.queryByLabelText("売却年")).toBeNull();
+    // タブの件数は全件、「表示 ○件」は絞り込んだ後の件数
+    await user.click(screen.getByRole("tab", { name: "売却済み(6)" }));
+    const select = screen.getByLabelText("売却年");
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["全て", "2026", "2025"]);
+    expect(select).toHaveValue("2026");
+    expect(screen.getByText("表示 4件")).toBeInTheDocument();
+    await user.selectOptions(select, "2025");
+    expect(await screen.findByText("表示 2件")).toBeInTheDocument();
+    expect(screen.getByLabelText("売却年")).toHaveValue("2025");
+    expect(screen.getByRole("tab", { name: "売却済み(6)" })).toHaveAttribute("aria-selected", "true");
+    await user.selectOptions(screen.getByLabelText("売却年"), "全て");
+    expect(await screen.findByText("表示 6件")).toBeInTheDocument();
+    expect(screen.getByLabelText("売却年")).toHaveValue("all");
+    expect(urlsOf(calls, "/api/holdings")).toEqual([
+      "/api/holdings",
+      "/api/holdings?sold_year=2025",
+      "/api/holdings?sold_year=all",
+    ]);
+  });
+
+  it("API が返した売却年が null なら、コンボボックスの初期値は「全て」", async () => {
+    const user = userEvent.setup();
+    const body = { ...HOLDINGS, sold: [], sold_count: 0, sold_years: [], sold_year: null, sold_shown_count: 0 };
+    renderApp("/holdings", (p) => (p === "/api/holdings" ? { body } : undefined));
+    await user.click(await screen.findByRole("tab", { name: "売却済み(0)" }));
+    const select = screen.getByLabelText("売却年");
+    expect(select).toHaveValue("all");
+    expect(within(select).getAllByRole("option")).toHaveLength(1);
+    expect(screen.getByText("表示 0件")).toBeInTheDocument();
+  });
+
+  it("保有中の「表示 ○件」は購入ごとの行の数(合計の行を開いても変わらない)", async () => {
+    const user = userEvent.setup();
+    renderApp("/holdings", handler());
+    // 2回に分けて購入した銘柄1つ + 1回の購入の銘柄1つ → 3件(タブの件数は銘柄の数)
+    expect(await screen.findByText("表示 3件")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "保有中(2)" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "サンプル工業Bの購入ごとの行を開く" }));
+    expect(screen.getByText("表示 3件")).toBeInTheDocument();
+  });
+
+  it("メモ: 20文字を超えると「…」付きで出し、title に全文を入れる。押すと全文と短い表示を切り替える", async () => {
+    const user = userEvent.setup();
+    const long = "決算が良ければ買い増す。\n悪ければ半分を売ってようすを見る";
+    const short = "決算が良ければ買い増す。 悪ければ半分を…";
+    const [first, second] = HOLDINGS.groups;
+    const body = {
+      ...HOLDINGS,
+      groups: [first!, { ...second!, lots: second!.lots.map((l) => ({ ...l, note: long })) }],
+      sold: HOLDINGS.sold.map((s) => ({ ...s, note: "あ".repeat(21) })),
+    };
+    renderApp("/holdings", (p) => (p === "/api/holdings" ? { body } : undefined));
+    await screen.findByText("判定の日: 2026-07-22(水)");
+    const cellsOf = (name: string) => Array.from(screen.getByText(name).closest("tr")!.querySelectorAll("td"));
+    // 購入が1回だけの銘柄は、合計の行(備考と操作の間)にメモを出す
+    const single = cellsOf("サンプル商事C");
+    const memo = within(single[single.length - 2]!).getByRole("button");
+    expect(memo).toHaveTextContent(short, { normalizeWhitespace: false });
+    expect(memo).toHaveAttribute("title", long);
+    expect(memo).toHaveAttribute("aria-expanded", "false");
+    await user.click(memo);
+    expect(memo).toHaveTextContent(long, { normalizeWhitespace: false });
+    expect(memo).toHaveClass("full");
+    await user.click(memo);
+    expect(memo).toHaveTextContent(short, { normalizeWhitespace: false });
+    expect(memo).not.toHaveClass("full");
+    // 買い増しの銘柄は、合計の行は空で、購入ごとの行に出す(メモがない行は空)
+    const total = cellsOf("サンプル工業B");
+    expect(total[total.length - 2]!.textContent).toBe("");
+    expect(screen.queryByText("1回目")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "サンプル工業Bの購入ごとの行を開く" }));
+    const lot1 = cellsOf("└ 1回目の購入");
+    expect(lot1[lot1.length - 3]!.textContent).toBe("(判定は合計の行)");
+    expect(lot1[lot1.length - 2]!.textContent).toBe("1回目");
+    expect(within(lot1[lot1.length - 2]!).getByText("1回目")).toHaveAttribute("title", "1回目");
+    expect(within(lot1[lot1.length - 1]!).getByRole("button", { name: "編集" })).toBeInTheDocument();
+    const lot2 = cellsOf("└ 2回目の購入");
+    expect(lot2[lot2.length - 2]!.textContent).toBe("");
+    // 売却済みの表も同じ出し方(20文字ちょうどまでは「…」を付けない)
+    await user.click(screen.getByRole("tab", { name: "売却済み(1)" }));
+    const sold = cellsOf("サンプル物産B");
+    const soldMemo = within(sold[14]!).getByRole("button");
+    expect(soldMemo).toHaveTextContent(`${"あ".repeat(20)}…`);
+    expect(soldMemo).toHaveAttribute("title", "あ".repeat(21));
+    await user.click(soldMemo);
+    expect(soldMemo).toHaveTextContent("あ".repeat(21));
+  });
+
+  it("メモが20文字ちょうどなら「…」を付けない", async () => {
+    const [first, second] = HOLDINGS.groups;
+    const note = "い".repeat(20);
+    const body = { ...HOLDINGS, groups: [first!, { ...second!, lots: second!.lots.map((l) => ({ ...l, note })) }] };
+    renderApp("/holdings", (p) => (p === "/api/holdings" ? { body } : undefined));
+    expect(await screen.findByText(note)).toHaveAttribute("title", note);
+    expect(screen.queryByText(/…$/)).toBeNull();
+  });
+
+  it("「＋ 銘柄を登録」は保有中のタブだけに出す", async () => {
+    const user = userEvent.setup();
+    renderApp("/holdings", handler());
+    expect(await screen.findByRole("button", { name: "＋ 銘柄を登録" })).toBeInTheDocument();
+    // ボタンは一覧を読み込む前から出るので、タブの件数(読み込んだ後に出る)を待ってから押す
+    await user.click(await screen.findByRole("tab", { name: "売却済み(1)" }));
+    expect(screen.queryByRole("button", { name: "＋ 銘柄を登録" })).toBeNull();
+    await user.click(screen.getByRole("tab", { name: "保有中(2)" }));
+    expect(screen.getByRole("button", { name: "＋ 銘柄を登録" })).toBeInTheDocument();
+  });
+
+  it("買値・買い株数・買いの金額・購入日のヘッダーに色のクラス(buy)を付ける(保有中・売却済み)", async () => {
+    const user = userEvent.setup();
+    renderApp("/holdings", handler());
+    await screen.findByText("判定の日: 2026-07-22(水)");
+    const buyHeads = () => Array.from(document.querySelectorAll("th.buy")).map((e) => e.textContent);
+    expect(buyHeads()).toEqual(["買値", "買い株数", "買いの金額", "購入日"]);
+    await user.click(screen.getByRole("tab", { name: "売却済み(1)" }));
+    expect(buyHeads()).toEqual(["買値", "買い株数", "買いの金額", "購入日"]);
+    // 売りの列の色(act)は今のまま
+    expect(Array.from(document.querySelectorAll("th.act")).map((e) => e.textContent)).toEqual([
+      "売値",
+      "売り株数",
+      "売りの金額",
+      "売却日",
+    ]);
   });
 
   it("判定と備考の色のクラス(売却は赤、注意・乗り換えは橙、判定なしは緑、「MM/DD の終値」は橙、流動性注意は緑)", async () => {

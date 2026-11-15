@@ -11,6 +11,7 @@ import { useSettings } from "../context/contexts";
 import { copyText } from "../lib/clipboard";
 import { type Table, compareMarkdown, compareSections, conditionLines } from "../lib/compareTables";
 import { PERIOD_LABELS } from "../lib/labels";
+import { usePageTitle } from "../lib/usePageTitle";
 
 type Period = "1M" | "3M" | "ALL";
 
@@ -66,6 +67,7 @@ function TableView({ table, showTitle }: { table: Table; showTitle: boolean }) {
 }
 
 export default function AccuracyComparePage() {
+  usePageTitle("精度の比較");
   const settings = useSettings();
   const [date, setDate] = useState<string | undefined>(undefined);
   const [period, setPeriod] = useState<Period>("1M"); // 初期値は直近1か月

@@ -1,11 +1,12 @@
 // 買い候補と同じ形の表(メールの買い候補の表と同じ列)。
-// 買い候補、銘柄の検索、トップで使う。銘柄名の列は横スクロールのときも左に固定する
+// 買い候補、銘柄検索、トップで使う。銘柄名の列は横スクロールのときも左に固定する
 import type { ReactNode } from "react";
 
 import type { HorizonValue, Note } from "../api/types";
 import { displayCode, formatPercent, formatPrice } from "../lib/format";
 import NotesText from "./NotesText";
 import StockName from "./StockName";
+import WatchStockButton from "./WatchStockButton";
 
 /** 表の1行 */
 export interface PredictionRow {
@@ -20,7 +21,7 @@ export interface PredictionRow {
   notes: Note[];
 }
 
-/** 並べ替え(銘柄の検索で使う) */
+/** 並べ替え(銘柄検索で使う) */
 export interface SortState {
   key: string;
   order: "asc" | "desc";
@@ -39,6 +40,8 @@ interface Props {
   sort?: SortState;
   /** 市場の次に業種の列を出す(買い候補の画面。メールと同じ) */
   showSector?: boolean;
+  /** 銘柄名の左に、検討中銘柄に追加するボタン(☆・★)を出す(買い候補・銘柄検索) */
+  showWatch?: boolean;
 }
 
 /** 予測日数ごとの3つの列(市場比 → 上昇確率 → 予測株価。メールと同じ順) */
@@ -48,7 +51,7 @@ const COLUMNS: { key: "rel" | "up" | "pred"; label: string }[] = [
   { key: "pred", label: "予測株価" },
 ];
 
-function SortableTh({
+export function SortableTh({
   sortKey,
   sort,
   className,
@@ -91,6 +94,7 @@ export default function PredictionTable({
   emptyMessage,
   sort,
   showSector = false,
+  showWatch = false,
 }: Props) {
   const single = horizons.length === 1;
   const columnCount = (showSector ? 6 : 5) + horizons.length * COLUMNS.length + 1;
@@ -113,7 +117,7 @@ export default function PredictionTable({
             </SortableTh>
             {showSector && <th rowSpan={single ? 1 : 2}>業種</th>}
             <SortableTh sortKey="base_price" sort={sort} rowSpan={single ? 1 : 2}>
-              現在値
+              予測日の株価
             </SortableTh>
             {single
               ? COLUMNS.map((c) => (
@@ -163,6 +167,7 @@ export default function PredictionTable({
               <td className="n">{r.rank ?? ""}</td>
               <td>{displayCode(r.code)}</td>
               <td className="fix">
+                {showWatch && <WatchStockButton code={r.code} name={r.name} />}
                 <StockName code={r.code} name={r.name} />
               </td>
               <td>{r.market}</td>

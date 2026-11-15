@@ -4,6 +4,8 @@ import type {
   CandidatesResponse,
   CompareResponse,
   DailyResponse,
+  FinancialRow,
+  FinancialsResponse,
   HoldingsResponse,
   HorizonValue,
   PredictionsResponse,
@@ -11,8 +13,13 @@ import type {
   RankResponse,
   ResultsResponse,
   RunsResponse,
+  RankingsResponse,
   ScreenResponse,
+  SectorAccuracyResponse,
+  StockAccuracyResponse,
   StockInfo,
+  WatchCodesResponse,
+  WatchStocksResponse,
 } from "../api/types";
 
 /** 予測日数ごとの値を作る */
@@ -300,6 +307,9 @@ export const HOLDINGS: HoldingsResponse = {
     },
   ],
   sold_count: 1,
+  sold_years: [2026],
+  sold_year: 2026,
+  sold_shown_count: 1,
   sold_pnl_amount: 16800,
   sold_buy_amount: 152000,
   sold_sell_amount: 168800,
@@ -432,6 +442,154 @@ export const SCREEN_MORE: ScreenResponse = {
   rows: [{ ...CANDIDATES.candidates[2]!, rank: null, sector33: "電気機器" }],
 };
 
+/** GET /api/rankings(ランキング。最初の2銘柄。続きは RANKINGS_MORE) */
+export const RANKINGS: RankingsResponse = {
+  pred_date: "2026-07-22",
+  type: "rel",
+  horizon: 20,
+  prev_pred_date: null,
+  regular_days: 0,
+  code_count: 3961,
+  total: 3,
+  offset: 0,
+  has_more: true,
+  rows: [
+    {
+      rank: 1,
+      code: "11110",
+      name: "サンプル銀行A",
+      market: "プライム",
+      sector33: "銀行業",
+      value: 0.878,
+      sub_value: null,
+      base_price: 3945,
+      horizons: horizons(0.878, 0.611, 4189.2),
+      fwd_per: 7.94,
+      pbr: 0.456,
+      avg_turnover: 1_234_500_000,
+      notes: [{ text: "ストップ高", color: "red" }],
+    },
+    {
+      rank: 2,
+      code: "11120",
+      name: "サンプル商事A",
+      market: "スタンダード",
+      sector33: "卸売業",
+      value: 0.812,
+      sub_value: null,
+      base_price: 1280.5,
+      horizons: horizons(0.812, 0.58, 1300),
+      fwd_per: null,
+      pbr: null,
+      avg_turnover: null,
+      notes: [],
+    },
+  ],
+  market_options: ["プライム", "スタンダード", "グロース"],
+  sector_options: [
+    { value: "3050", label: "銀行業" },
+    { value: "3650", label: "電気機器" },
+  ],
+};
+
+export const RANKINGS_MORE: RankingsResponse = {
+  ...RANKINGS,
+  offset: 2,
+  has_more: false,
+  rows: [{ ...RANKINGS.rows[0]!, rank: 3, code: "11145", name: "サンプル建設A(優先株式)", value: 0.7, notes: [] }],
+};
+
+/** GET /api/accuracy/stocks(銘柄別の的中率。最初の2銘柄。続きは STOCK_ACCURACY_MORE) */
+export const STOCK_ACCURACY: StockAccuracyResponse = {
+  summary_date: "2026-07-22",
+  horizon: 20,
+  period: "3M",
+  period_start: "2026-04-22",
+  segment: "all",
+  direction: "up",
+  min_count: 20,
+  total: 3,
+  offset: 0,
+  has_more: true,
+  sort: "beat_rate",
+  order: "desc",
+  rows: [
+    {
+      rank: 1,
+      code: "11110",
+      name: "サンプル銀行A",
+      market: "プライム",
+      sector33: "銀行業",
+      verified_count: 61,
+      hit_rate: 0.754,
+      beat_rate: 0.623,
+      avg_change_rate: 0.0312,
+      avg_price_error_rate: 0.0456,
+    },
+    {
+      rank: 2,
+      code: "11120",
+      name: "サンプル商事A",
+      market: "スタンダード",
+      sector33: "卸売業",
+      verified_count: 1234,
+      hit_rate: 0.6,
+      beat_rate: null,
+      avg_change_rate: -0.008,
+      avg_price_error_rate: null,
+    },
+  ],
+};
+
+export const STOCK_ACCURACY_MORE: StockAccuracyResponse = {
+  ...STOCK_ACCURACY,
+  offset: 2,
+  has_more: false,
+  rows: [
+    {
+      rank: 3,
+      code: "11145",
+      name: "サンプル建設A(優先株式)",
+      market: "プライム",
+      sector33: "建設業",
+      verified_count: 20,
+      hit_rate: 0.5,
+      beat_rate: 0.5,
+      avg_change_rate: 0,
+      avg_price_error_rate: 0.1,
+    },
+  ],
+};
+
+/** GET /api/accuracy/sectors(業種別の的中率。卸売業は買い候補が0件、(不明)は業種がない行) */
+export const SECTOR_ACCURACY: SectorAccuracyResponse = {
+  summary_date: "2026-07-22",
+  horizon: 20,
+  period: "3M",
+  period_start: "2026-04-22",
+  direction: "up",
+  rows: [
+    {
+      sector33_code: "3050",
+      sector33: "銀行業",
+      all: { verified_count: 5200, hit_rate: 0.612, beat_rate: 0.58, avg_change_rate: 0.021 },
+      top: { verified_count: 310, hit_rate: 0.7, beat_rate: 0.81, avg_change_rate: 0.064 },
+    },
+    {
+      sector33_code: "6050",
+      sector33: "卸売業",
+      all: { verified_count: 9800, hit_rate: 0.541, beat_rate: 0.49, avg_change_rate: -0.004 },
+      top: { verified_count: 0, hit_rate: null, beat_rate: null, avg_change_rate: null },
+    },
+    {
+      sector33_code: null,
+      sector33: "(不明)",
+      all: { verified_count: 12, hit_rate: 0.5, beat_rate: null, avg_change_rate: 0 },
+      top: { verified_count: 3, hit_rate: 0.333, beat_rate: 0.9, avg_change_rate: 0.1 },
+    },
+  ],
+};
+
 /** 精度の比較(GET /api/accuracy/compare) */
 export const COMPARE: CompareResponse = {
   summary_date: "2026-07-22",
@@ -484,4 +642,193 @@ export const COMPARE: CompareResponse = {
     },
     { model_version: "20260110", first_pred_date: "2026-01-13", last_pred_date: "2026-01-16", base_date: null, train_start_date: null, train_end_date: null },
   ],
+};
+
+/** 検討中銘柄に追加済みの銘柄(GET /api/watch-stocks/codes)。11120 だけ追加済み */
+export const WATCH_CODES: WatchCodesResponse = { items: [{ code: "11120", memo: "決算の後に買う" }] };
+
+/** 検討中銘柄の一覧(GET /api/watch-stocks) */
+export const WATCH_STOCKS: WatchStocksResponse = {
+  latest_pred_date: "2026-07-22",
+  rows: [
+    {
+      code: "11120",
+      name: "サンプル商事A",
+      market: "スタンダード",
+      sector33: "卸売業",
+      memo: "決算の後に買う\n2行目",
+      created_at: "2026-07-17T20:15:00+09:00",
+      updated_at: "2026-07-18T08:00:00+09:00",
+      // 追加した日: 予測日の株価 400、市場比 80%、上昇確率 50〜53%、予測株価 410〜413
+      picked: { pred_date: "2026-07-17", close: 400, has_prediction: true, horizons: horizons(0.8, 0.5, 410), notes: [] },
+      // 最新: 予測日の株価は上がり、市場比は同じ、上昇確率は下がり、予測株価は上がった
+      latest: {
+        pred_date: "2026-07-22",
+        close: 443,
+        has_prediction: true,
+        horizons: horizons(0.8, 0.45, 456.1),
+        notes: [{ text: "流動性注意", color: "green" }],
+      },
+      change_rate: 0.1075,
+    },
+    {
+      // 予測の対象でない銘柄(予測の項目は全て「-」)。メモなし、値下がり
+      code: "13050",
+      name: "サンプルETF",
+      market: "その他",
+      sector33: "その他",
+      memo: "",
+      created_at: "2026-07-16T09:00:00+09:00",
+      updated_at: "2026-07-16T09:00:00+09:00",
+      picked: {
+        pred_date: "2026-07-16",
+        close: 2000,
+        has_prediction: false,
+        horizons: [5, 10, 20, 60].map((h) => ({ horizon: h, rel_prob: null, up_prob: null, pred_price: null })),
+        notes: [],
+      },
+      latest: {
+        pred_date: "2026-07-22",
+        close: 1900,
+        has_prediction: false,
+        horizons: [5, 10, 20, 60].map((h) => ({ horizon: h, rel_prob: null, up_prob: null, pred_price: null })),
+        notes: [],
+      },
+      change_rate: -0.05,
+    },
+  ],
+};
+
+/** 業績の表の1行を作る(値がない項目は over で入れる) */
+function finRow(label: string, perType: string, fyEnd: string, over: Partial<FinancialRow>): FinancialRow {
+  return {
+    period_label: label,
+    per_type: perType,
+    fy_end: fyEnd,
+    disc_date: "2026-05-12",
+    sales: 52_000_000_000,
+    sales_yoy: { kind: "percent", rate: 0.083 },
+    op: 3_100_000_000,
+    op_yoy: { kind: "percent", rate: -0.021 },
+    np: 2_100_000_000,
+    np_yoy: { kind: "percent", rate: 0 },
+    op_margin: 0.0596,
+    eps: 47.73,
+    ...over,
+  };
+}
+
+/** GET /api/stocks/11110/financials(銘柄詳細の業績。前年比の全ての書き方と、修正の向きを入れてある) */
+export const FINANCIALS: FinancialsResponse = {
+  code: "11110",
+  annual: [
+    finRow("2026年3月期 通期", "FY", "2026-03-31", {}),
+    finRow("2025年3月期 通期", "FY", "2025-03-31", {
+      disc_date: "2025-05-13",
+      sales: 48_000_000_000,
+      sales_yoy: { kind: "to_profit", rate: null },
+      op_yoy: { kind: "to_loss", rate: null },
+      np_yoy: { kind: "loss_shrink", rate: null },
+    }),
+    finRow("2024年3月期 通期", "FY", "2024-03-31", {
+      disc_date: "2024-05-14",
+      sales: null,
+      sales_yoy: { kind: "none", rate: null },
+      op: -1_250_000_000,
+      op_yoy: { kind: "loss_expand", rate: null },
+      np: null,
+      np_yoy: { kind: "none", rate: null },
+      op_margin: null,
+      eps: null,
+    }),
+  ],
+  quarterly: [
+    finRow("2027年3月期 1Q", "1Q", "2027-03-31", { disc_date: "2026-08-07", sales: 13_000_000_000 }),
+    finRow("2026年3月期 通期", "FY", "2026-03-31", {}),
+    finRow("2026年3月期 4Q", "4Q", "2026-03-31", {
+      disc_date: "2026-04-10",
+      sales_yoy: { kind: "none", rate: null },
+      op_yoy: { kind: "none", rate: null },
+      np_yoy: { kind: "none", rate: null },
+    }),
+  ],
+  forecast: {
+    fy_end: "2027-03-31",
+    period_label: "2027年3月期",
+    next_period_label: "2028年3月期",
+    disc_date: "2026-08-07",
+    current: [
+      { key: "sales", value: 55_000_000_000, prev_value: 54_000_000_000, direction: "up", revised_date: "2026-08-07" },
+      { key: "op", value: 3_000_000_000, prev_value: 3_300_000_000, direction: "down", revised_date: "2026-08-07" },
+      { key: "np", value: 2_200_000_000, prev_value: null, direction: null, revised_date: null },
+      { key: "eps", value: 50.12, prev_value: null, direction: null, revised_date: null },
+      { key: "div", value: 26, prev_value: 24, direction: "up", revised_date: "2026-06-20" },
+    ],
+    next: [
+      { key: "sales", value: 56_000_000_000, prev_value: null, direction: null, revised_date: null },
+      { key: "op", value: null, prev_value: null, direction: null, revised_date: null },
+      { key: "np", value: null, prev_value: null, direction: null, revised_date: null },
+      { key: "eps", value: null, prev_value: null, direction: null, revised_date: null },
+      { key: "div", value: 28, prev_value: null, direction: null, revised_date: null },
+    ],
+  },
+  revisions: [
+    {
+      disc_date: "2026-08-07",
+      doc_kind: "statement",
+      sales: 55_000_000_000,
+      op: 3_000_000_000,
+      np: 2_200_000_000,
+      sales_direction: "up",
+      op_direction: "down",
+      np_direction: null,
+      direction: "mixed",
+    },
+    {
+      disc_date: "2026-07-01",
+      doc_kind: "earn_revision",
+      sales: 54_000_000_000,
+      op: 3_300_000_000,
+      np: null,
+      sales_direction: null,
+      op_direction: "up",
+      np_direction: null,
+      direction: "up",
+    },
+    {
+      disc_date: "2026-06-01",
+      doc_kind: "other",
+      sales: 54_000_000_000,
+      op: 3_200_000_000,
+      np: 2_200_000_000,
+      sales_direction: null,
+      op_direction: "down",
+      np_direction: null,
+      direction: "down",
+    },
+    {
+      disc_date: "2026-05-12",
+      doc_kind: "initial",
+      sales: 54_000_000_000,
+      op: 3_250_000_000,
+      np: 2_200_000_000,
+      sales_direction: null,
+      op_direction: null,
+      np_direction: null,
+      direction: null,
+    },
+  ],
+  dividend_yield: 0.00659,
+  dividend: { dividend: 26, price: 3945, price_date: "2026-07-22", disc_date: "2026-06-20", is_next: false },
+};
+
+/** 業績のデータがない銘柄(ETF など) */
+export const FINANCIALS_EMPTY: FinancialsResponse = {
+  code: "11110",
+  annual: [],
+  quarterly: [],
+  forecast: null,
+  revisions: [],
+  dividend_yield: null,
+  dividend: null,
 };

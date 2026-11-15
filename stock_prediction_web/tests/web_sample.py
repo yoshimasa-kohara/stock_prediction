@@ -6,7 +6,7 @@
 - 予測は LAST_DAY を含む直近 PRED_DAYS 営業日分。一番古い予測日の行は、答え合わせ済み(VERIFIED)にする。
 """
 
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from decimal import Decimal
 
 import numpy as np
@@ -238,3 +238,46 @@ def add_holding(
     ).fetchone()
     assert row is not None
     return int(row["holding_id"])
+
+
+# fin_summary の数値のカラム(add_fin の values に渡せる名前)
+FIN_COLUMNS: list[str] = [
+    "sales", "op", "np", "eps", "f_sales", "f_op", "f_np", "f_eps", "f_div_ann",
+    "nx_f_sales", "nx_f_op", "nx_f_np", "nx_f_div_ann",
+]  # fmt: skip
+
+
+def add_fin(
+    conn: psycopg.Connection[DictRow],
+    code: str,
+    disc_no: str,
+    disc_date: date,
+    per_type: str | None,
+    fy_end: date | None,
+    doc_type: str | None = None,
+    disc_time: time | None = time(15, 0),
+    **values: float | None,
+) -> None:
+    """財務情報(fin_summary)を1行入れる。values は sales・op・np・eps・f_sales などのカラムの値(省略は NULL)。
+
+    doc_type を省略すると、会計期間の種類に合わせた決算短信(例: FYFinancialStatements_Consolidated_JP)にする。
+    """
+    unknown = set(values) - set(FIN_COLUMNS)
+    assert not unknown, f"fin_summary にないカラムです: {unknown}"
+    conn.execute(
+        f"""
+        INSERT INTO fin_summary (disc_no, code, disc_date, disc_time, doc_type, cur_per_type, cur_fy_en,
+                                 {", ".join(FIN_COLUMNS)})
+        VALUES (%s, %s, %s, %s, %s, %s, %s, {", ".join(["%s"] * len(FIN_COLUMNS))})
+        """,
+        (
+            disc_no,
+            code,
+            disc_date,
+            disc_time,
+            doc_type or f"{per_type or 'FY'}FinancialStatements_Consolidated_JP",
+            per_type,
+            fy_end,
+            *[values.get(c) for c in FIN_COLUMNS],
+        ),
+    )
