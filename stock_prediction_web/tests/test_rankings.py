@@ -66,7 +66,7 @@ def test_rankings_default(client: TestClient, sample: psycopg.Connection[DictRow
     assert first["avg_turnover"] > const.LIQUIDITY_WARN_TURNOVER
     assert [h["horizon"] for h in first["horizons"]] == const.PREDICT_HORIZONS
     assert first["horizons"][0]["rel_prob"] == pytest.approx(0.80)
-    assert {"text": "ストップ高", "color": "red"} in first["notes"]
+    assert {"text": "ストップ高", "color": "red", "bold": False} in first["notes"]
     # バリュエーション指標がない銘柄は None
     assert (body["rows"][3]["fwd_per"], body["rows"][3]["pbr"]) == (None, None)
     assert body["market_options"] == ["プライム", "スタンダード", "グロース"]
@@ -79,7 +79,7 @@ def test_rankings_include_illiquid(client: TestClient, sample: psycopg.Connectio
     assert codes(body) == PRED_CODES
     low = body["rows"][1]
     assert low["avg_turnover"] < const.LIQUIDITY_WARN_TURNOVER
-    assert {"text": "流動性注意", "color": "green"} in low["notes"]
+    assert {"text": "流動性注意", "color": "green", "bold": False} in low["notes"]
     # 備考に流動性注意が付く銘柄と、exclude_illiquid で除かれる銘柄は同じ
     noted = {r["code"] for r in body["rows"] if any(n["text"] == "流動性注意" for n in r["notes"])}
     assert noted == set(PRED_CODES) - set(codes(get(client)))

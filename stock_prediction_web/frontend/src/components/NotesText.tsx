@@ -1,4 +1,4 @@
-// 備考。色はメールと同じ(赤・青・橙)、区切りは「／」
+// 備考。色はメールと同じ(赤 = 良い、青 = 悪い、橙・緑 = 注意。太字 = 目立たせたい)、区切りは「／」
 import { Fragment } from "react";
 
 import type { Note } from "../api/types";
@@ -15,7 +15,7 @@ export default function NotesText({ notes }: { notes: Note[] }) {
       {notes.map((n, i) => (
         <Fragment key={`${i}-${n.text}`}>
           {i > 0 && NOTE_SEPARATOR}
-          <span className={COLOR_CLASS[n.color] ?? ""}>{n.text}</span>
+          <span className={`${COLOR_CLASS[n.color] ?? ""}${n.bold ? " bd" : ""}`.trim()}>{n.text}</span>
         </Fragment>
       ))}
     </>

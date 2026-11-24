@@ -1,10 +1,12 @@
 // 銘柄詳細の株価チャート。Lightweight Charts(ライトウェイト・チャーツ。TradingView 社。Apache License 2.0)。
 // 上の段: ローソク足(上がった日は赤、下がった日は青)、移動平均(5・25・75日)、トレンドライン(破線)、ボリンジャーバンド(5本線)。
 // 下の段: 出来高(株。showVolume が false なら出さない。日経平均のチャート)。マウス(スマホは指で押した所)の日の値を枠で出す。
+// overlay を渡すと、ローソク足に印と水平線を付け、持っていなかった期間の背景を塗る(保有銘柄の売却済みのチャート)。
 // チャートの作者が TradingView 社であることのロゴのリンク(attributionLogo)は出したままにする
 import {
   CandlestickSeries,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   HistogramSeries,
   LineSeries,
@@ -21,12 +23,33 @@ import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react"
 import type { PriceRow, TrendLine } from "../api/types";
 import { CHART_COLORS, VOLUME_PANE_HEIGHT, trendSegments } from "../lib/chart";
 import { formatDateWithWeekday, formatPrice, formatVolume } from "../lib/format";
+import { type HeldRange, OutsideShade } from "../lib/outsideShade";
 
 /** 表示の切り替え */
 export interface ChartVisibility {
   ma: boolean;
   trend: boolean;
   bb: boolean;
+  /** 売買の線(買値から売値への直線)と買値・売値の水平線(overlay を渡す画面だけ) */
+  trade: boolean;
+}
+
+/** ローソク足に書き込むもの(保有銘柄の売却済みのチャート) */
+export interface ChartOverlay {
+  /** 印(買・売)。日付の古い順 */
+  markers: {
+    time: string;
+    position: "aboveBar" | "belowBar";
+    shape: "arrowUp" | "arrowDown";
+    color: string;
+    text: string;
+  }[];
+  /** 購入日の買値から売却日の売値までを結ぶ直線(実線・太さ2)。売買の線のチェックで出し入れする(省略すると引かない) */
+  tradeLine?: { from: { time: string; value: number }; to: { time: string; value: number }; color: string };
+  /** 水平線(破線。右の目盛りに札を出す。売買の線のチェックで出し入れする) */
+  priceLines: { price: number; color: string; title: string }[];
+  /** 持っていた期間。この外の背景を CHART_COLORS.outside で塗る(省略すると塗らない) */
+  held?: HeldRange;
 }
 
 interface Props {
@@ -38,6 +61,8 @@ interface Props {
   height: number;
   /** 出来高の段と、マウスの位置の枠の出来高の行を出すか(省略すると出す。日経平均は出さない) */
   showVolume?: boolean;
+  /** ローソク足に書き込むもの(省略すると何も書かない) */
+  overlay?: ChartOverlay;
 }
 
 /** マウスを置いた日の枠の中身 */
@@ -78,14 +103,17 @@ function points(rows: PriceRow[], key: keyof PriceRow) {
   });
 }
 
-export default function PriceChart({ rows, trendlines, visible, bbDays, height, showVolume = true }: Props) {
+export default function PriceChart({ rows, trendlines, visible, bbDays, height, showVolume = true, overlay }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const groups = useRef<{ ma: ISeriesApi<"Line">[]; trend: ISeriesApi<"Line">[]; bb: ISeriesApi<"Line">[] }>({
-    ma: [],
-    trend: [],
-    bb: [],
-  });
+  const groups = useRef<{
+    ma: ISeriesApi<"Line">[];
+    trend: ISeriesApi<"Line">[];
+    bb: ISeriesApi<"Line">[];
+    trade: ISeriesApi<"Line">[];
+  }>({ ma: [], trend: [], bb: [], trade: [] });
+  // 買値・売値の水平線(売買の線のチェックで出し入れする)
+  const priceLinesRef = useRef<{ line: IPriceLine; title: string }[]>([]);
   const markersRef = useRef<TrendMarkerSet[]>([]);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const byDate = useMemo(() => new Map(rows.map((r) => [r.date, r])), [rows]);
@@ -123,6 +151,27 @@ export default function PriceChart({ rows, trendlines, visible, bbDays, height, 
           : [],
       ),
     );
+    // 書き込むもの(買・売の印、買値・売値の線、持っていなかった期間の背景)
+    if (overlay) {
+      if (overlay.markers.length > 0) {
+        createSeriesMarkers(
+          candle,
+          overlay.markers.map((m) => ({ ...m, time: m.time as Time })),
+        );
+      }
+      priceLinesRef.current = overlay.priceLines.map((p) => ({
+        title: p.title,
+        line: candle.createPriceLine({
+          price: p.price,
+          color: p.color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: p.title,
+        }),
+      }));
+      if (overlay.held) candle.attachPrimitive(new OutsideShade(overlay.held, CHART_COLORS.outside));
+    }
     const line = (color: string, title: string, style: LineStyle = LineStyle.Solid, width: 1 | 2 = 1) =>
       chart.addSeries(LineSeries, {
         color,
@@ -162,6 +211,17 @@ export default function PriceChart({ rows, trendlines, visible, bbDays, height, 
         s.setData(points(rows, b.key));
         return s;
       }),
+      // 売買の線: 購入日の買値から売却日の売値までを結ぶ直線(2点だけ)
+      trade: overlay?.tradeLine
+        ? [overlay.tradeLine].map((t) => {
+            const s = line(t.color, "", LineStyle.Solid, 2);
+            s.setData([
+              { time: t.from.time as Time, value: t.from.value },
+              { time: t.to.time as Time, value: t.to.value },
+            ]);
+            return s;
+          })
+        : [],
     };
     // 下の段: 出来高
     if (showVolume) {
@@ -171,6 +231,8 @@ export default function PriceChart({ rows, trendlines, visible, bbDays, height, 
         1,
       );
       volume.setData(points(rows, "volume").map((p) => ({ ...p, color: CHART_COLORS.volume })));
+      // 持っていなかった期間の背景は、出来高の段にも塗る
+      if (overlay?.held) volume.attachPrimitive(new OutsideShade(overlay.held, CHART_COLORS.outside));
       chart.panes()[1]?.setHeight(VOLUME_PANE_HEIGHT);
     }
     chart.timeScale().fitContent();
@@ -203,7 +265,7 @@ export default function PriceChart({ rows, trendlines, visible, bbDays, height, 
       chartRef.current = null;
       markersRef.current = [];
     };
-  }, [rows, trendlines, byDate, showVolume]);
+  }, [rows, trendlines, byDate, showVolume, overlay]);
 
   // 表示の切り替え(作り直さずに、線を出す・隠す)
   useEffect(() => {
@@ -212,7 +274,12 @@ export default function PriceChart({ rows, trendlines, visible, bbDays, height, 
     // 線の名前と抜けた日の印も、線と一緒に出す・隠す
     markersRef.current.forEach((m) => m.api.setMarkers(visible.trend ? m.markers : []));
     groups.current.bb.forEach((s) => s.applyOptions({ visible: visible.bb }));
-  }, [visible, rows, trendlines]);
+    // 売買の線と、買値・売値の水平線(買・売の印は、チェックに関係なくいつも出す)
+    groups.current.trade.forEach((s) => s.applyOptions({ visible: visible.trade }));
+    priceLinesRef.current.forEach((p) =>
+      p.line.applyOptions({ lineVisible: visible.trade, axisLabelVisible: visible.trade, title: visible.trade ? p.title : "" }),
+    );
+  }, [visible, rows, trendlines, overlay]);
 
   return (
     <div className="chartbox">

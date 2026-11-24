@@ -26,9 +26,9 @@ def test_candidates_latest(client: TestClient, sample: psycopg.Connection[DictRo
     assert [h["horizon"] for h in first["horizons"]] == const.PREDICT_HORIZONS
     texts = [n["text"] for n in first["notes"]]
     assert texts[0] == "ストップ高"
-    assert {"text": "PBR0.5倍割れ(割安)", "color": "red"} in first["notes"]
+    assert {"text": "PBR0.5倍割れ(割安)", "color": "red", "bold": False} in first["notes"]
     second = body["candidates"][1]
-    assert {"text": "流動性注意", "color": "green"} in second["notes"]
+    assert {"text": "流動性注意", "color": "green", "bold": False} in second["notes"]
 
 
 def test_candidates_fallback_note(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
@@ -111,7 +111,7 @@ def test_results(client: TestClient, sample: psycopg.Connection[DictRow]) -> Non
     assert cells[const.MAIN_HORIZON]["actual"] is None
     assert first["summary"] == [{"horizon": const.PREDICT_HORIZONS[0], "market_median": 0.01, "beat_count": 2}]
     # 備考はメールと同じ(予測日ごとに計算する)
-    assert {"text": "流動性注意", "color": "green"} in first["rows"][1]["notes"]
+    assert {"text": "流動性注意", "color": "green", "bold": False} in first["rows"][1]["notes"]
 
 
 def test_results_default_period(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
@@ -148,7 +148,7 @@ def test_candidates_sector(client: TestClient, sample: psycopg.Connection[DictRo
         (3, "11130", "電気機器"),
     ]
     # 備考は買い候補と同じ計算(11130 は赤字予想)
-    assert {"text": "赤字予想(業績注意)", "color": "blue"} in body["candidates"][2]["notes"]
+    assert {"text": "赤字予想(業績注意)", "color": "blue", "bold": False} in body["candidates"][2]["notes"]
     # 省略すると買い候補(top)。業種の列も返す
     top = client.get("/api/candidates").json()
     assert top["kind"] == "top" and top["candidates"][0]["sector"] == "銀行業"

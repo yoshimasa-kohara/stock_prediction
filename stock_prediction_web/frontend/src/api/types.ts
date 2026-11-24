@@ -92,10 +92,11 @@ export interface PredictionDates {
   dates: string[];
 }
 
-/** 備考の1つ(color は red・blue・orange・green) */
+/** 備考の1つ(color は red・blue・orange・green。bold は太字で、今は損切りライン) */
 export interface Note {
   text: string;
   color: string;
+  bold?: boolean;
 }
 
 /** 予測日数ごとの値 */
@@ -265,6 +266,8 @@ export interface PriceRow {
   bb_up2: number | null;
   bb_dn1: number | null;
   bb_dn2: number | null;
+  /** その日の株価(調整前)を、この行の株価(株式分割を調整した値)に直す倍率。指数は null(古いテストの値は省略) */
+  multiplier?: number | null;
 }
 
 /** トレンドライン */

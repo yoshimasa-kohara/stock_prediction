@@ -19,10 +19,12 @@ MSG_NO_PREDICTION_AT_ALL: str = "予測がまだありません。バッチで�
 
 
 class Note(BaseModel):
-    """備考の1つ。color は画面の色(red: 赤、blue: 青、orange: 橙、green: 緑)。"""
+    """備考の1つ。color は画面の色(red: 赤、blue: 青、orange: 橙、green: 緑)。
+    bold は太字(目立たせたいもの。今は損切りライン)。"""
 
     text: str
     color: str
+    bold: bool = False
 
 
 class HorizonValue(BaseModel):

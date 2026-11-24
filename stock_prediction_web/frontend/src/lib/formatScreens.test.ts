@@ -55,7 +55,7 @@ describe("書式(全画面で追加したもの)", () => {
   });
 
   it("判定・状態・答え合わせの表示", () => {
-    expect(judgmentClass("売却(損切りライン)")).toBe("jr");
+    expect(judgmentClass("売却(損切りライン)")).toBe("jb");
     expect(judgmentClass("保持(注意: 上昇予測だが下降しています)")).toBe("jo");
     expect(judgmentClass("乗り換えを検討")).toBe("jo");
     expect(judgmentClass("保持")).toBe("");

@@ -1,8 +1,8 @@
 // 画面の表示に使う、区分の値と見た目の対応
 
-/** 判定の文字の色のクラス(売却は赤、注意・乗り換えは橙、判定なしは緑) */
+/** 判定の文字の色のクラス(色 = 良い・悪い、太字 = 目立たせたい。売却は悪い判定なので青で太字、注意・乗り換えは橙で太字、判定なしは緑) */
 export function judgmentClass(judgment: string): string {
-  if (judgment.startsWith("売却")) return "jr";
+  if (judgment.startsWith("売却")) return "jb";
   if (judgment.startsWith("保持(注意") || judgment.startsWith("乗り換え")) return "jo";
   if (judgment.startsWith("判定なし")) return "jg";
   return "";

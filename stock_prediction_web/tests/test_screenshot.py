@@ -49,9 +49,9 @@ def test_build_shots_names() -> None:
     days = [date(2026, 1, 1)] * 70
     ctx = capture.CaptureContext(pred_days=days, detail_code="11110", lot_code="11120", lot_close=1000.0)
     shots = capture.build_shots(ctx)
-    # 11画面(04 と 05 は2枚ずつ)
+    # 11画面(04 は2枚、05 は3枚)
     assert sorted({s.no for s in shots}) == [f"{n:02d}" for n in range(1, 12)]
-    assert len(shots) == 13
+    assert len(shots) == 14
     assert "08_銘柄検索" in [s.name for s in shots]
     assert all(s.path().startswith("/") for s in shots)
 

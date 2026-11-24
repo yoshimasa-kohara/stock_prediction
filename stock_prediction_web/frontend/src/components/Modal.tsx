@@ -7,9 +7,11 @@ interface Props {
   children: ReactNode;
   /** 下のボタン */
   footer: ReactNode;
+  /** 幅の広いダイアログ(チャートを出すとき。スマホでは画面の幅いっぱい) */
+  wide?: boolean;
 }
 
-export default function Modal({ title, onClose, children, footer }: Props) {
+export default function Modal({ title, onClose, children, footer, wide = false }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -19,8 +21,8 @@ export default function Modal({ title, onClose, children, footer }: Props) {
   }, [onClose]);
 
   return (
-    <div className="overlay">
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={title}>
+    <div className={wide ? "overlay wide" : "overlay"}>
+      <div className={wide ? "dialog wide" : "dialog"} role="dialog" aria-modal="true" aria-label={title}>
         <h3>{title}</h3>
         {children}
         <div className="foot">{footer}</div>

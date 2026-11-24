@@ -103,16 +103,35 @@ NOTE_DEAD_MID: str = "中長期デッドクロス発生"
 # 割安さ・稼ぐ力の備考。PBR と ROE の文言は、閾値から作る(pbr_note、roe_note)
 NOTE_PER_LOW: str = "予想PERが業種平均より低い(割安)"
 NOTE_DEFICIT: str = "赤字予想(業績注意)"
-# 青で表示する備考(悪い材料)。流動性注意は緑、それ以外は赤(良い材料・目立たせたいもの)
+# ストップ高・ストップ安の備考(画面の備考と同じ文言。画面は api/notes.py でここから読む)
+NOTE_UPPER_LIMIT: str = "ストップ高"
+NOTE_LOWER_LIMIT: str = "ストップ安"
+
+# 色のルール: 色 = 良い・悪い(赤 = 良い・上がる、青 = 悪い・下がる)、太字 = 目立たせたい。
+# 流動性注意は緑、「MM/DD の終値」は橙(良い・悪いではなく注意)
+# 青で表示する備考(悪い材料)。デッドクロス・赤字予想。下値支持線の下抜け・損切りライン・ストップ安は is_blue_note で足す
 BLUE_NOTES: frozenset[str] = frozenset({NOTE_DEAD_SHORT, NOTE_DEAD_MID, NOTE_DEFICIT})
 
 
 def is_blue_note(note: str) -> bool:
-    """青で表示する備考か。デッドクロス・赤字予想(BLUE_NOTES)と、下値支持線の下抜け。"""
+    """青(悪い材料)で表示する備考か。色のルール: 赤 = 良い・上がる、青 = 悪い・下がる。
+
+    デッドクロス・赤字予想(BLUE_NOTES)、下値支持線の下抜け、損切りライン、ストップ安。
+    これ以外(流動性注意・「MM/DD の終値」を除く)は赤(良い材料)。
+    """
     # デッドクロスは「中長期デッドクロス発生(本日)」のように起きた日が付くので、先頭で判定する
     return (
-        note in BLUE_NOTES or note.startswith(NOTE_SUPPORT_PREFIX) or note.startswith((NOTE_DEAD_SHORT, NOTE_DEAD_MID))
+        note in BLUE_NOTES
+        or note == NOTE_LOWER_LIMIT
+        or note == stop_loss_note()
+        or note.startswith(NOTE_SUPPORT_PREFIX)
+        or note.startswith((NOTE_DEAD_SHORT, NOTE_DEAD_MID))
     )
+
+
+def is_bold_note(note: str) -> bool:
+    """太字(目立たせたい)で表示する備考か。今は損切りラインだけ(見落とさないため)。"""
+    return note == stop_loss_note()
 
 
 _STALE_CLOSE_RE = re.compile(r"^\d{2}/\d{2} の終値$")
@@ -329,7 +348,7 @@ def _e(text: object) -> str:
 
 
 # =====================================================================
-# データの読み込み
+# データの読み込み(手順2〜6)
 # =====================================================================
 
 
@@ -602,7 +621,7 @@ def load_notify_data(conn: psycopg.Connection[DictRow], target_date: date) -> No
 
 
 # =====================================================================
-# メールの本文
+# メールの本文(手順7)
 # =====================================================================
 
 
@@ -699,9 +718,12 @@ def _market_state_html(market_state: MarketState | None, index_trend: IndexTrend
 
 
 def _note_html(notes: list[str]) -> str:
-    """備考の色。流動性注意は緑(COLOR_QUIET)、「MM/DD の終値」は橙(COLOR_CAUTION)、
-    デッドクロス・赤字予想・下値支持線の下抜けは青(is_blue_note)、
-    それ以外(ストップ高・ストップ安・ゴールデンクロス・上値抵抗線の上抜け・損切りライン・割安・稼ぐ力)は赤。"""
+    """備考の色と太字(色のルール: 色 = 良い・悪い、太字 = 目立たせたい)。
+
+    流動性注意は緑(COLOR_QUIET)、「MM/DD の終値」は橙(COLOR_CAUTION)。
+    悪い材料(デッドクロス・赤字予想・下値支持線の下抜け・損切りライン・ストップ安)は青(is_blue_note)、
+    それ以外(ストップ高・ゴールデンクロス・上値抵抗線の上抜け・割安・稼ぐ力)は赤(良い材料)。
+    太字は目立たせたいもの(is_bold_note。損切りライン)。"""
     parts = []
     for n in notes:
         if n == NOTE_LOW_LIQUIDITY:
@@ -710,13 +732,16 @@ def _note_html(notes: list[str]) -> str:
             color = COLOR_CAUTION
         else:
             color = _BLUE if is_blue_note(n) else _RED
-        parts.append(f'<span style="color:{color};">{_e(n)}</span>')
+        weight = "font-weight:bold;" if is_bold_note(n) else ""
+        parts.append(f'<span style="color:{color};{weight}">{_e(n)}</span>')
     return NOTE_SEPARATOR.join(parts)
 
 
 def _judgment_style(judgment: str) -> str:
+    """保有銘柄の判定の色と太字(色 = 良い・悪い、太字 = 目立たせたい)。
+    売却は悪い判定なので青で太字、注意・乗り換えは橙で太字、判定なしは緑。"""
     if judgment.startswith("売却"):
-        return f"color:{_RED};font-weight:bold;"
+        return f"color:{_BLUE};font-weight:bold;"
     if judgment.startswith("保持(注意") or judgment.startswith("乗り換え"):
         return f"color:{COLOR_CAUTION};font-weight:bold;"
     if judgment == JUDGE_NONE:
@@ -1108,7 +1133,7 @@ def build_text(data: NotifyData, is_backfill: bool) -> str:
 
 
 def mail_subject(target_date: date, is_backfill: bool) -> str:
-    """件名。"""
+    """件名(手順7【件名】)。"""
     backfill = "【補完分】" if is_backfill else ""
     return f"{const.MAIL_SUBJECT_PREFIX}{backfill}買い候補・保有銘柄 {target_date.isoformat()}"
 

@@ -54,7 +54,7 @@ td.n{text-align:right;} td.c{text-align:center;} td.b{font-weight:bold;}
 tbody tr:nth-child(even) td{background:#f6f6f6;}
 .up{color:#c00000;font-weight:bold;} .dn{color:#0055cc;font-weight:bold;} .eq{color:#666;font-weight:bold;}
 .r{color:#c00000;} .bl{color:#0055cc;} .o{color:var(--color-caution);} .g{color:var(--color-quiet);}
-.jr{color:#c00000;font-weight:bold;} .jo{color:var(--color-caution);font-weight:bold;} .jg{color:var(--color-quiet);}
+.bd{font-weight:bold;} .jb{color:#0055cc;font-weight:bold;} .jo{color:var(--color-caution);font-weight:bold;} .jg{color:var(--color-quiet);}
 tfoot td{background:#fff8dc;font-weight:bold;}
 .fix{position:sticky;left:0;z-index:1;background:#fff;} th.fix{background:#dce6f1;} tfoot td.fix{background:#fff8dc;}
 tbody tr:nth-child(even) td.fix{background:#f6f6f6;}
@@ -124,6 +124,9 @@ td.errcell{white-space:normal;min-width:220px;max-width:420px;}
 .tog{background:none;border:none;cursor:pointer;padding:0 4px 0 0;color:#557;font-size:11px;}
 .overlay{position:fixed;inset:0;background:rgba(20,30,50,.35);display:flex;align-items:flex-start;justify-content:center;padding:40px 12px;z-index:50;overflow-y:auto;}
 .overlay .dialog{width:100%;}
+/* チャートを出す幅の広いダイアログ(保有銘柄の売却済みのチャート) */
+.dialog.wide{max-width:1100px;}
+.dialog .soldhead{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;margin-bottom:8px;}
 .form.wide{grid-template-columns:150px 1fr 150px 1fr;}
 .form .inline,.inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .form .fixed{background:#eef0f4;border-radius:4px;padding:6px 8px;}
@@ -148,6 +151,8 @@ td.errcell{white-space:normal;min-width:220px;max-width:420px;}
  .chart{height:360px;}
  .pconly{display:none !important;}
  .chartbar .checks{margin-left:0;}
+ .overlay.wide{padding:0;}
+ .dialog.wide{border-radius:0;border-left:none;border-right:none;padding:12px 8px;}
  .suggest{right:auto;left:0;width:100%;}
 }
 

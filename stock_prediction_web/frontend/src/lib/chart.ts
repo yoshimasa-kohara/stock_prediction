@@ -17,6 +17,13 @@ export const CHART_COLORS = {
   bb1: "#2bb3c0",
   bbMid: "#888888",
   volume: "#9aa5b8",
+  /** 保有銘柄の売却済みのチャート: 買いの印・買値の線(赤)、売りの印・売値の線(青) */
+  buy: "#c00000",
+  sell: "#0055cc",
+  /** 保有銘柄の売却済みのチャート: 持っていなかった期間の背景(薄いグレー) */
+  outside: "rgba(120, 120, 120, 0.13)",
+  /** 売買の線(買値から売値への直線)の色: 売値 = 買値 のとき(灰色)。上がり(赤)・下がり(青)は up・down を使う */
+  tradeFlat: "#888888",
 } as const;
 
 /** トレンドラインの名前(例: 上値抵抗線(接触4回)) */
@@ -127,6 +134,9 @@ export const CHART_HEIGHT_KEY = "stockChartHeight";
 
 /** 選んだ高さをブラウザーに残すときの名前(トップ・買い候補の「相場」の日経平均のチャート。銘柄詳細とは別) */
 export const INDEX_CHART_HEIGHT_KEY = "indexChartHeight";
+
+/** 選んだ高さをブラウザーに残すときの名前(保有銘柄の売却済みのチャートのダイアログ。銘柄詳細とは別) */
+export const SOLD_CHART_HEIGHT_KEY = "soldChartHeight";
 
 /** 下の段(出来高)の高さ(px)。チャートの高さを変えても、この高さのまま */
 export const VOLUME_PANE_HEIGHT = 90;

@@ -73,7 +73,7 @@ def test_holdings_group_average_and_judgment(client: TestClient, sample: psycopg
     assert g["judgment"].startswith("保持")
     # 11120 は大きく値下がり(買値 5000) → 損切りラインの備考(判定は変えない)
     g2 = groups["11120"]
-    assert g2["notes"][0] == {"text": "損切りライン10%の値を下回っています。", "color": "red"}
+    assert g2["notes"][0] == {"text": "損切りライン10%の値を下回っています。", "color": "blue", "bold": True}
     totals = body["totals"]
     assert totals["cost"] == 1150 * 200 + 5000 * 200
     assert totals["pnl_amount"] == pytest.approx(totals["value"] - totals["cost"])
@@ -94,7 +94,7 @@ def test_holdings_現在値が判定の日の終値でないときは備考に�
     groups = {g["code"]: g for g in client.get("/api/holdings").json()["groups"]}
     g = groups["11110"]
     assert g["current"] == earlier_close and g["current_date"] == earlier.isoformat()
-    assert g["notes"][0] == {"text": f"{earlier:%m/%d} の終値", "color": "orange"}
+    assert g["notes"][0] == {"text": f"{earlier:%m/%d} の終値", "color": "orange", "bold": False}
     # その日の終値がある銘柄には出さない
     assert all("の終値" not in n["text"] for n in groups["11120"]["notes"])
 

@@ -1,12 +1,14 @@
 """銘柄の API(/api/stocks/...)のテスト。"""
 
+from datetime import date, timedelta
+
 import numpy as np
 import pandas as pd
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
 from psycopg.rows import DictRow
-from web_sample import LAST_DAY, PRICE_DAYS, pred_days
+from web_sample import LAST_DAY, PRICE_DAYS, pred_days, price_days
 
 import const
 from api import web_const
@@ -73,7 +75,7 @@ def test_stock_info(client: TestClient, sample: psycopg.Connection[DictRow]) -> 
     assert body["earnings_name"] == "1Q"
     assert body["earnings_days"] == 12
     assert body["notes_date"] == LAST_DAY.isoformat()
-    assert {"text": "ストップ高", "color": "red"} in body["notes"]
+    assert {"text": "ストップ高", "color": "red", "bold": False} in body["notes"]
 
 
 def test_stock_info_not_target(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
@@ -134,6 +136,88 @@ def test_prices_no_rows_and_bad_period(client: TestClient, conn: psycopg.Connect
     assert body["rows"] == []
     assert body["trendlines"] == []
     assert client.get("/api/stocks/99990/prices?period=2Y").status_code == 400
+
+
+def test_prices_range(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """日付の範囲の指定: start の margin 営業日前から end の margin 営業日後まで。移動平均は全ての行で計算する。"""
+    days = price_days()
+    start, end = days[90], days[110]
+    body = client.get(f"/api/stocks/11110/prices?start={start}&end={end}&period=1M").json()
+    assert body["period"] == web_const.CHART_RANGE_PERIOD
+    dates = [r["date"] for r in body["rows"]]
+    margin = web_const.CHART_RANGE_MARGIN_DAYS
+    assert dates == [d.isoformat() for d in days[90 - margin : 110 + margin + 1]]
+    # 最初の行から75日線が出る(全ての行で計算してから切り出す)
+    assert body["rows"][0]["ma75"] is not None
+    # 分割のないデータなので倍率は1
+    assert {r["multiplier"] for r in body["rows"]} == {1.0}
+    # トレンドラインは、表示する最後の行を右端にする
+    for line in body["trendlines"]:
+        assert dates[0] <= line["start_date"] < line["end_date"] <= dates[-1]
+    # margin を変える
+    body = client.get(f"/api/stocks/11110/prices?start={start}&end={end}&margin=3").json()
+    assert [r["date"] for r in body["rows"]] == [d.isoformat() for d in days[87:114]]
+
+
+def test_prices_range_short_margin_and_no_end(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """余白が足りないときは、ある所まで。end を省略すると最新の日まで(後ろの余白なし)。"""
+    days = price_days()
+    body = client.get(f"/api/stocks/11110/prices?start={days[3]}&end={days[-2]}").json()
+    dates = [r["date"] for r in body["rows"]]
+    assert dates[0] == days[0].isoformat()
+    assert dates[-1] == LAST_DAY.isoformat()
+    body = client.get(f"/api/stocks/11110/prices?start={days[100]}").json()
+    dates = [r["date"] for r in body["rows"]]
+    assert dates[0] == days[100 - web_const.CHART_RANGE_MARGIN_DAYS].isoformat()
+    assert dates[-1] == LAST_DAY.isoformat()
+    # 営業日でない日を start にしても、その次の株価の日から数える
+    sunday = date(2026, 7, 19)
+    body = client.get(f"/api/stocks/11110/prices?start={sunday}&margin=0").json()
+    assert body["rows"][0]["date"] == "2026-07-21"  # 7/20 は海の日
+    # 期間の指定は今と同じ
+    six = client.get("/api/stocks/11110/prices").json()
+    assert six["period"] == web_const.CHART_DEFAULT_PERIOD
+
+
+def test_prices_range_multiplier(client: TestClient, conn: psycopg.Connection[DictRow]) -> None:
+    """株式分割があったときは、行ごとの倍率を返す(買値・売値の線をチャートの株価にそろえる)。"""
+    conn.execute("INSERT INTO stock_master (code, name, applied_date) VALUES ('99990', '分割', '2026-07-01')")
+    rows = [("2026-07-01", 1000, 1), ("2026-07-02", 1010, 1), ("2026-07-03", 505, 0.5), ("2026-07-06", 510, 1)]
+    for d, c, f in rows:
+        conn.execute(
+            "INSERT INTO daily_price (trade_date, code, open, high, low, close, volume, adj_factor)"
+            " VALUES (%s, '99990', %s, %s, %s, %s, 100, %s)",
+            (d, c, c, c, c, f),
+        )
+    body = client.get("/api/stocks/99990/prices?start=2026-07-01&end=2026-07-03&margin=0").json()
+    assert [r["close"] for r in body["rows"]] == [500, 505, 505]
+    assert [r["multiplier"] for r in body["rows"]] == [0.5, 0.5, 1.0]
+
+
+def test_prices_range_empty_and_errors(client: TestClient, conn: psycopg.Connection[DictRow]) -> None:
+    """株価がない、範囲に株価がないときは空。start > end、日付の形が違う、end だけ、margin が負は 400。"""
+    conn.execute("INSERT INTO stock_master (code, name, applied_date) VALUES ('99990', '株価なし', '2026-07-22')")
+    body = client.get("/api/stocks/99990/prices?start=2026-07-01").json()
+    assert body["rows"] == []
+    assert body["period"] == web_const.CHART_RANGE_PERIOD
+    for query in [
+        "start=2026-07-10&end=2026-07-01",
+        "start=2026/07/01",
+        "start=2026-07-01&end=abc",
+        "end=2026-07-01",
+        "start=2026-07-01&margin=-1",
+    ]:
+        res = client.get(f"/api/stocks/11110/prices?{query}")
+        assert res.status_code == 400, query
+    assert client.get("/api/stocks/00000/prices?start=2026-07-01").status_code == 404
+
+
+def test_prices_range_before_data(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
+    """end が株価の最初の日より前なら、余白の分だけ(余白0なら空)。"""
+    days = price_days()
+    before = days[0] - timedelta(days=30)
+    body = client.get(f"/api/stocks/11110/prices?start={before}&end={before}&margin=0").json()
+    assert body["rows"] == []
 
 
 def test_predictions(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:

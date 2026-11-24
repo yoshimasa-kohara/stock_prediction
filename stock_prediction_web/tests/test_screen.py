@@ -32,7 +32,7 @@ def test_screen_default(client: TestClient, sample: psycopg.Connection[DictRow])
     assert codes(body) == PRED_CODES  # 市場比は銘柄の順に下がる
     first = body["rows"][0]
     assert first["rank"] == 1
-    assert {"text": "ストップ高", "color": "red"} in first["notes"]
+    assert {"text": "ストップ高", "color": "red", "bold": False} in first["notes"]
     assert body["rows"][2]["rank"] is None
     assert body["market_options"] == ["プライム", "スタンダード", "グロース"]
     assert {"value": "3050", "label": "銀行業"} in body["sector_options"]
@@ -161,3 +161,10 @@ def test_note_filter_matches_cross_with_days() -> None:
     assert to_note("短期ゴールデンクロス発生(3営業日前)").color == "red"
     assert to_note("下値支持線(接触4回)を下抜け(上昇から転換・本日)").color == "blue"
     assert to_note("上値抵抗線(接触3回)を上抜け(下降から転換・2営業日前)").color == "red"
+    # 損切りラインとストップ安は悪い材料なので青。太字は損切りラインだけ
+    stop_loss = to_note("損切りライン10%の値を下回っています。")
+    assert (stop_loss.color, stop_loss.bold) == ("blue", True)
+    lower = to_note("ストップ安")
+    assert (lower.color, lower.bold) == ("blue", False)
+    upper = to_note("ストップ高")
+    assert (upper.color, upper.bold) == ("red", False)

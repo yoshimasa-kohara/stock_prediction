@@ -23,9 +23,11 @@ from core.notify_core import (
     NOTE_GOLDEN_MID,
     NOTE_GOLDEN_SHORT,
     NOTE_LOW_LIQUIDITY,
+    NOTE_LOWER_LIMIT,
     NOTE_PER_LOW,
     cross_notes,
     is_blue_note,
+    is_bold_note,
     is_stale_close_note,
     pbr_note,
     roe_note,
@@ -33,21 +35,21 @@ from core.notify_core import (
 )
 from core.trendline import NOTE_SUPPORT_PREFIX
 
-# ストップ高・ストップ安の備考(メールと同じ文言)
+# ストップ高の備考(メールと同じ文言。ストップ安は core の NOTE_LOWER_LIMIT を使う)
 NOTE_UPPER_LIMIT: str = "ストップ高"
-NOTE_LOWER_LIMIT: str = "ストップ安"
 # 上値抵抗線の上抜けの備考の先頭(core/trendline.py の NOTE_RESIST_BREAK の先頭)
 NOTE_RESIST_PREFIX: str = "上値抵抗線"
 
 
 def to_note(text: str) -> Note:
-    """備考の文言に、画面の色を付ける(メールと同じ。流動性注意は緑、「MM/DD の終値」は橙、
-    デッドクロス・赤字予想・下抜けは青、それ以外は赤)。"""
+    """備考の文言に、画面の色と太字を付ける(メールと同じ。色 = 良い・悪い、太字 = 目立たせたい)。
+    流動性注意は緑、「MM/DD の終値」は橙、悪い材料(デッドクロス・赤字予想・下抜け・損切りライン・ストップ安)は青、
+    それ以外は赤。太字は損切りラインだけ(is_bold_note)。"""
     if text == NOTE_LOW_LIQUIDITY:
         return Note(text=text, color="green")
     if is_stale_close_note(text):
         return Note(text=text, color="orange")
-    return Note(text=text, color="blue" if is_blue_note(text) else "red")
+    return Note(text=text, color="blue" if is_blue_note(text) else "red", bold=is_bold_note(text))
 
 
 def to_notes(texts: list[str]) -> list[Note]:

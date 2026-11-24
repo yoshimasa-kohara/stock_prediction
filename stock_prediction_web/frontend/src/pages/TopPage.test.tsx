@@ -58,7 +58,7 @@ describe("トップ", () => {
       "ずれ -18.0 ポイント",
     );
     // 保有銘柄の表(判定の色)
-    expect(screen.getByText("売却(下降予測、市場の中央値も下回る予測)")).toHaveClass("jr");
+    expect(screen.getByText("売却(下降予測、市場の中央値も下回る予測)")).toHaveClass("jb");
     expect(screen.getByText("保持(注意: 上昇予測だが下降しています)")).toHaveClass("jo");
     expect(screen.getAllByText("1134")[0]).toBeInTheDocument();
     // 的中率

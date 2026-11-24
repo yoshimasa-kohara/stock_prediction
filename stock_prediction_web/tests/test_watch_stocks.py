@@ -164,12 +164,12 @@ def test_list(client: TestClient, sample: psycopg.Connection[DictRow]) -> None:
     screen_row = next(r for r in client.get("/api/screen").json()["rows"] if r["code"] == "11110")
     assert a["latest"]["horizons"] == screen_row["horizons"]
     assert a["latest"]["notes"] == screen_row["notes"]
-    assert {"text": "ストップ高", "color": "red"} in a["latest"]["notes"]
+    assert {"text": "ストップ高", "color": "red", "bold": False} in a["latest"]["notes"]
     # 追加した日の予測と備考は、その予測日の銘柄検索と同じ(ストップ高は最後の日だけ)
     old_row = next(r for r in client.get(f"/api/screen?date={first}").json()["rows"] if r["code"] == "11110")
     assert a["picked"]["horizons"] == old_row["horizons"]
     assert a["picked"]["notes"] == old_row["notes"]
-    assert {"text": "ストップ高", "color": "red"} not in a["picked"]["notes"]
+    assert {"text": "ストップ高", "color": "red", "bold": False} not in a["picked"]["notes"]
 
     # 追加した日 = 最新の予測日なら、値上がり率は 0
     b = body["rows"][0]

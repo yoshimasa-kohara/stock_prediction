@@ -5,8 +5,14 @@ export interface FakeSeries {
   kind: string;
   options: Record<string, unknown>;
   data: unknown[];
+  /** 水平線(createPriceLine) */
+  priceLines: Record<string, unknown>[];
+  /** 付けたプリミティブ(attachPrimitive) */
+  primitives: unknown[];
   setData: (d: unknown[]) => void;
   applyOptions: (o: Record<string, unknown>) => void;
+  createPriceLine: (o: Record<string, unknown>) => { applyOptions: (o: Record<string, unknown>) => void };
+  attachPrimitive: (p: unknown) => void;
 }
 
 /** 線に付けた文字・印(createSeriesMarkers) */
@@ -50,11 +56,26 @@ export function createChartMock() {
           kind,
           options: { ...options },
           data: [],
+          priceLines: [],
+          primitives: [],
           setData(d) {
             s.data = d;
           },
           applyOptions(o) {
             s.options = { ...s.options, ...o };
+          },
+          createPriceLine(o) {
+            // 水平線の設定は、作った後に applyOptions で変えられる(売買の線のチェックで出し入れする)
+            const line = { ...o };
+            s.priceLines.push(line);
+            return {
+              applyOptions(next) {
+                Object.assign(line, next);
+              },
+            };
+          },
+          attachPrimitive(p) {
+            s.primitives.push(p);
           },
         };
         chartState.series.push(s);

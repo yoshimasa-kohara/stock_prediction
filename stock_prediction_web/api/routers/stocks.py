@@ -2,13 +2,14 @@
 
 GET /api/stocks/search: 銘柄コード(前方一致)・銘柄名(部分一致)で探す
 GET /api/stocks/{code}: 銘柄の情報、指標、次の決算発表予定日、備考
-GET /api/stocks/{code}/prices: 株式分割を調整した株価、移動平均、ボリンジャーバンド、トレンドライン
+GET /api/stocks/{code}/prices: 株式分割を調整した株価、移動平均、ボリンジャーバンド、トレンドライン。
+  期間(period)か、日付の範囲(start・end・margin。保有銘柄の売却済みのチャート)で指定する
 GET /api/stocks/{code}/predictions: 最新の予測と、過去の予測と答え合わせ
 GET /api/stocks/{code}/financials: 業績(通期・四半期の表、会社予想と修正、予想の配当利回り。計算は api/financials.py)
 """
 
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Annotated, Any
 
 import numpy as np
@@ -252,6 +253,9 @@ class PriceRow(BaseModel):
     bb_up2: float | None
     bb_dn1: float | None
     bb_dn2: float | None
+    # その日の株価(調整前)を、この行の株価(株式分割を調整した値)に直す倍率(common/price_adjust.py の adj_multiplier)。
+    # 保有銘柄の売却済みのチャートで、買値・売値の線をチャートの株価にそろえるために使う。指数は None
+    multiplier: float | None = None
 
 
 class TrendLineItem(BaseModel):
@@ -277,7 +281,7 @@ class PricesResponse(BaseModel):
     """/api/stocks/{code}/prices と /api/index/prices の返り値。code は銘柄コード(指数は指数コード)。"""
 
     code: str
-    period: str
+    period: str  # 日付の範囲で指定したときは web_const.CHART_RANGE_PERIOD
     bb_days: int
     rows: list[PriceRow]
     trendlines: list[TrendLineItem]
@@ -361,12 +365,38 @@ def check_period(period: str) -> None:
         raise ApiError(400, f"期間の指定が正しくありません({period})")
 
 
-def build_prices_response(df: pd.DataFrame, code: str, period: str) -> PricesResponse:
+def parse_chart_date(text: str, name: str) -> date:
+    """チャートの範囲の日付(YYYY-MM-DD)を読む。形が正しくなければ 400(422 にしない)。"""
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        raise ApiError(400, f"{name} の日付の形が正しくありません({text})") from None
+
+
+def range_span(df: pd.DataFrame, start: date, end: date | None, margin: int) -> tuple[int, int]:
+    """日付の範囲で表示する行の位置(最初の行, 最後の行)。最後の行が最初の行より前なら、表示する行はない。
+
+    最初の行は start(以降で最初の株価の日)の margin 行前(足りなければ最初の行)。
+    最後の行は end(以前で最後の株価の日)の margin 行後(足りなければ最新の日)。end が None なら最新の日。
+    """
+    dates = df["trade_date"]
+    first = max(0, int((dates < pd.Timestamp(start)).sum()) - margin)
+    last = len(df) - 1
+    if end is not None:
+        last = min(last, int((dates <= pd.Timestamp(end)).sum()) - 1 + margin)
+    return first, last
+
+
+def build_prices_response(
+    df: pd.DataFrame, code: str, period: str, span: tuple[int, int] | None = None
+) -> PricesResponse:
     """チャートの値を作る(銘柄の株価と指数日足で共通)。
 
     df は trade_date と adj_open・adj_high・adj_low・adj_close・adj_volume の列を持つ、日付の古い順の表。
-    df の最後の行がチャートの右端の日で、トレンドラインもその日を基準に引く。
-    移動平均とボリンジャーバンドは全ての期間で計算してから、期間の分だけを返す。
+    span を省略すると period の期間で、df の最後の行がチャートの右端の日。
+    span(最初の行, 最後の行の位置。range_span)を渡すと、その行だけを返す(period は返り値にそのまま入れる)。
+    トレンドラインは、表示する最後の行を右端の日として引く。
+    移動平均とボリンジャーバンドは全ての期間で計算してから、表示する行の分だけを返す。
     ボリンジャーバンドは const.BB_DAYS 日の移動平均 ± 標準偏差の1倍・2倍(特徴量 bb_pctb と同じ計算)。
     df が空なら rows・trendlines を空にして返す。
     """
@@ -380,13 +410,19 @@ def build_prices_response(df: pd.DataFrame, code: str, period: str) -> PricesRes
     sd = c.rolling(const.BB_DAYS, min_periods=const.BB_DAYS).std()
     df["bb_mid"], df["bb_up1"], df["bb_up2"] = mid, mid + sd, mid + 2 * sd
     df["bb_dn1"], df["bb_dn2"] = mid - sd, mid - 2 * sd
-    days = CHART_PERIOD_DAYS[period]
-    first_shown = 0
-    if days is not None:
-        first = df["trade_date"].max() - pd.Timedelta(days=days)
-        first_shown = int((df["trade_date"] <= first).sum())
-    lines = find_trendlines(df, first_shown)
-    df = df.iloc[first_shown:]
+    if span is None:
+        days = CHART_PERIOD_DAYS[period]
+        first_shown, last_shown = 0, len(df) - 1
+        if days is not None:
+            first = df["trade_date"].max() - pd.Timedelta(days=days)
+            first_shown = int((df["trade_date"] <= first).sum())
+    else:
+        first_shown, last_shown = span
+    if last_shown < first_shown:
+        return PricesResponse(code=code, period=period, bb_days=const.BB_DAYS, rows=[], trendlines=[])
+    # トレンドラインは、表示する最後の行までの株価で引く(その行が右端の日)
+    lines = find_trendlines(df.iloc[: last_shown + 1], first_shown)
+    df = df.iloc[first_shown : last_shown + 1]
     df = df.replace({np.inf: np.nan, -np.inf: np.nan})
     records: list[dict[str, Any]] = [{str(k): v for k, v in r.items()} for r in df.to_dict("records")]
     rows = [
@@ -405,6 +441,7 @@ def build_prices_response(df: pd.DataFrame, code: str, period: str) -> PricesRes
             bb_up2=_clean(r["bb_up2"]),
             bb_dn1=_clean(r["bb_dn1"]),
             bb_dn2=_clean(r["bb_dn2"]),
+            multiplier=_clean(r.get("adj_multiplier")),
         )
         for r in records
     ]
@@ -413,11 +450,41 @@ def build_prices_response(df: pd.DataFrame, code: str, period: str) -> PricesRes
 
 @router.get("/api/stocks/{code}/prices", response_model=PricesResponse)
 @log_api
-def get_prices(conn: Conn, code: str, period: str = web_const.CHART_DEFAULT_PERIOD) -> PricesResponse:
-    """銘柄のチャートの値(株式分割を調整した株価。計算は build_prices_response)。"""
-    check_period(period)
+def get_prices(
+    conn: Conn,
+    code: str,
+    period: str = web_const.CHART_DEFAULT_PERIOD,
+    start: str | None = None,
+    end: str | None = None,
+    margin: int = web_const.CHART_RANGE_MARGIN_DAYS,
+) -> PricesResponse:
+    """銘柄のチャートの値(株式分割を調整した株価。計算は build_prices_response)。
+
+    start を指定すると period は使わず、日付の範囲で返す(保有銘柄の売却済みのチャート)。
+    start の margin 営業日前から、end の margin 営業日後まで(end を省略すると最新の日まで。後ろの余白なし)。
+
+    Args:
+        period: 期間(1M・3M・6M・1Y・ALL)。start を指定したときは使わない
+        start: 範囲の最初の日(YYYY-MM-DD)
+        end: 範囲の最後の日(YYYY-MM-DD)。start と一緒に指定する
+        margin: 範囲の前後の余白(営業日数。株価の行で数える。0以上)
+    """
+    if start is None:
+        if end is not None:
+            raise ApiError(400, "end は start と一緒に指定してください")
+        check_period(period)
+        load_master(conn, code)
+        return build_prices_response(load_adjusted_prices(conn, code), code, period)
+    first_day = parse_chart_date(start, "start")
+    last_day = None if end is None else parse_chart_date(end, "end")
+    check_range(first_day, last_day)
+    if margin < 0:
+        raise ApiError(400, f"margin は0以上にしてください({margin})")
     load_master(conn, code)
-    return build_prices_response(load_adjusted_prices(conn, code), code, period)
+    df = load_adjusted_prices(conn, code)
+    if df.empty:
+        return build_prices_response(df, code, web_const.CHART_RANGE_PERIOD)
+    return build_prices_response(df, code, web_const.CHART_RANGE_PERIOD, range_span(df, first_day, last_day, margin))
 
 
 # =====================================================================

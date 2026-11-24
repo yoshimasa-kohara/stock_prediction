@@ -444,7 +444,7 @@ def test_通知メールの内容(notify_data: psycopg.Connection[DictRow], smtp
     assert '<span style="color:#2e7d32;">流動性注意</span>' in html_body
     # 保有銘柄: 売却済みと、購入日が指定日より後の行は出さない。判定と損益の色
     assert html_body.count(">保持</td>") == 1
-    assert 'color:#c00000;font-weight:bold;">売却(下降予測、市場の中央値も下回る予測)</td>' in html_body
+    assert 'color:#0055cc;font-weight:bold;">売却(下降予測、市場の中央値も下回る予測)</td>' in html_body
     assert 'color:#f57c00;font-weight:bold;">保持(注意: 上昇予測だが下降しています)</td>' in html_body
     assert 'color:#f57c00;font-weight:bold;">乗り換えを検討(上昇予測だが市場の中央値を下回る予測)</td>' in html_body
     assert 'color:#f57c00;font-weight:bold;">保持(注意: 相場全体が下がる予測)</td>' in html_body
@@ -453,7 +453,11 @@ def test_通知メールの内容(notify_data: psycopg.Connection[DictRow], smtp
     assert 'font-weight:bold;">判定なし' not in html_body
     assert 'color:#c00000;">+6.3%</td>' in html_body and 'color:#0055cc;">-1.3%</td>' in html_body
     # 損切りライン。買値から12%下がった 99990 だけ。-4.0% の 33330 には出さない
-    assert html_body.count('<span style="color:#c00000;">損切りライン10%の値を下回っています。</span>') == 1
+    # 損切りラインは悪い材料なので青、見落とさないよう太字
+    assert (
+        html_body.count('<span style="color:#0055cc;font-weight:bold;">損切りライン10%の値を下回っています。</span>')
+        == 1
+    )
     assert 'color:#0055cc;">-12.0%</td>' in html_body
     # 的中率
     assert "55.0%(83,380件)" in html_body and "59.0%(1,260件)" in html_body
@@ -744,6 +748,7 @@ def test_買い候補と保有銘柄がない場合(conn: psycopg.Connection[Dic
     html_body, text = _bodies(smtp.sent[0])
     assert "買い候補はありません" in html_body and "保有銘柄はありません" in html_body
     # 0銘柄でも表の見出しは出し、1行目を全ての列(6 + 4日数 × 3 + 1 = 19列)で連結する。2つの買い候補の表の両方
+    # 
     assert html_body.count('<tr><td colspan="19"') == 2 and "20日後<br>市場比</th>" in html_body
     assert text.count("買い候補はありません") == 2 and "保有銘柄はありません" in text
 
@@ -959,6 +964,19 @@ def test_青で表示する備考() -> None:
     assert not notify_core.is_blue_note("上値抵抗線(接触3回)を上抜け(上昇が加速・2営業日前)")
     assert notify_core.is_blue_note(notify_core.NOTE_DEFICIT)
     assert not notify_core.is_blue_note(notify_core.NOTE_LOW_LIQUIDITY)
+    # 損切りラインとストップ安も青。ストップ高・ROE は赤のまま
+    assert notify_core.is_blue_note(notify_core.stop_loss_note())
+    assert notify_core.is_blue_note(notify_core.NOTE_LOWER_LIMIT)
+    assert not notify_core.is_blue_note(notify_core.NOTE_UPPER_LIMIT)
+    assert not notify_core.is_blue_note(notify_core.roe_note())
+
+
+def test_太字で表示する備考() -> None:
+    assert notify_core.is_bold_note(notify_core.stop_loss_note())
+    assert not notify_core.is_bold_note(notify_core.NOTE_LOWER_LIMIT)
+    assert not notify_core.is_bold_note(notify_core.NOTE_UPPER_LIMIT)
+    assert not notify_core.is_bold_note(notify_core.roe_note())
+    assert not notify_core.is_bold_note(notify_core.NOTE_DEAD_SHORT)
 
 
 # =====================================================================
@@ -1005,23 +1023,26 @@ def test_単独の通知は一部の宛先に送れなければ失敗(
 
 def test_備考の色_終値の日付と流動性注意() -> None:
     """流動性注意は緑 #2e7d32、「MM/DD の終値」は橙 #f57c00(判定の注意と同じ色)。注意の箱の #b35900 とは別。"""
-    html_text = notify_core._note_html(["11/05 の終値", "流動性注意", "ストップ高"])
+    html_text = notify_core._note_html(
+        ["11/05 の終値", "流動性注意", "ストップ高", "ストップ安", notify_core.stop_loss_note()]
+    )
     assert html_text == (
         '<span style="color:#f57c00;">11/05 の終値</span>／<span style="color:#2e7d32;">流動性注意</span>／'
-        '<span style="color:#c00000;">ストップ高</span>'
+        '<span style="color:#c00000;">ストップ高</span>／<span style="color:#0055cc;">ストップ安</span>／'
+        '<span style="color:#0055cc;font-weight:bold;">損切りライン10%の値を下回っています。</span>'
     )
     assert notify_core.COLOR_CAUTION == "#f57c00" and notify_core.COLOR_QUIET == "#2e7d32"
     assert notify_core._ORANGE == "#b35900"
 
 
 def test_判定の色() -> None:
-    """判定の色: 保持は色なし、注意と乗り換えは #f57c00 の太字、売却は赤の太字、判定なしは緑(太字にしない)。"""
+    """判定の色: 保持は色なし、注意と乗り換えは #f57c00 の太字、売却は青の太字、判定なしは緑(太字にしない)。"""
     style = notify_core._judgment_style
     assert style(notify_core.JUDGE_HOLD) == ""
     assert style(notify_core.JUDGE_HOLD_DROP) == "color:#f57c00;font-weight:bold;"
     assert style(notify_core.JUDGE_HOLD_MARKET_DOWN) == "color:#f57c00;font-weight:bold;"
     assert style(notify_core.JUDGE_SWITCH) == "color:#f57c00;font-weight:bold;"
-    assert style(notify_core.JUDGE_SELL) == "color:#c00000;font-weight:bold;"
+    assert style(notify_core.JUDGE_SELL) == "color:#0055cc;font-weight:bold;"
     assert style(notify_core.JUDGE_NONE) == "color:#2e7d32;"
 
 

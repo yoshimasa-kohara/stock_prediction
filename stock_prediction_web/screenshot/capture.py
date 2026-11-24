@@ -18,6 +18,7 @@
 
 import argparse
 import logging
+import re
 import tempfile
 import threading
 import time as time_mod
@@ -147,6 +148,15 @@ def show_sold(page: Page) -> None:
     wait_loaded(page)
 
 
+def show_sold_chart(page: Page) -> None:
+    """売却済みのタブの最初の行の「チャート」を押し、購入日〜売却日のチャートのダイアログを出す(05 保有銘柄)。"""
+    show_sold(page)
+    page.get_by_role("button", name=re.compile("のチャート$")).first.click()
+    # ダイアログの中のチャート(lightweight-charts の canvas)が描かれるまで待つ
+    page.wait_for_selector("[role=dialog] canvas, .modal canvas, [data-testid=price-chart] canvas", timeout=LOAD_TIMEOUT_MS)
+    wait_loaded(page)
+
+
 def display_code(code: str) -> str:
     """画面に出す銘柄コード(5桁目が 0 なら4桁)。"""
     return code[:4] if len(code) == 5 and code.endswith("0") else code
@@ -195,6 +205,7 @@ def build_shots(ctx: CaptureContext) -> list[Shot]:
         ),
         Shot("05", "05_保有銘柄", lambda: "/holdings", open_sell_dialog(ctx)),
         Shot("05", "05_保有銘柄_売却済み", lambda: "/holdings", show_sold),
+        Shot("05", "05_保有銘柄_売却済みのチャート", lambda: "/holdings", show_sold_chart),
         Shot("06", "06_的中率", lambda: "/accuracy"),
         Shot("07", "07_実行履歴", lambda: "/runs"),
         Shot("08", "08_銘柄検索", lambda: "/search", search_by_name),

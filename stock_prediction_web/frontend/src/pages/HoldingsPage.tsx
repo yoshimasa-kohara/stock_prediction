@@ -1,8 +1,9 @@
 // 保有銘柄。保有している銘柄の状態を見る。登録・編集・売却もこの画面で行う。
-// 同じ銘柄を2回以上に分けて買った場合は「合計の行」にまとめ、「▶」で購入ごとの行を開く
-import { Fragment, useState } from "react";
+// 同じ銘柄を2回以上に分けて買った場合は「合計の行」にまとめ、「▶」で購入ごとの行を開く。
+// 売却済みの行の「チャート」で、購入日〜売却日のチャートをダイアログで出す
+import { Fragment, Suspense, lazy, useState } from "react";
 
-import type { HoldingGroup, HoldingsResponse } from "../api/types";
+import type { HoldingGroup, HoldingsResponse, SoldRow } from "../api/types";
 import { useApi } from "../api/useApi";
 import ErrorMessage from "../components/ErrorMessage";
 import { EditDialog, type LotTarget, RegisterDialog, SellDialog } from "../components/HoldingDialogs";
@@ -24,7 +25,14 @@ import {
 import { judgmentClass } from "../lib/labels";
 import { usePageTitle } from "../lib/usePageTitle";
 
-type Dialog = { kind: "register" } | { kind: "edit"; target: LotTarget } | { kind: "sell"; target: LotTarget };
+// 売却済みのチャートのダイアログ(lightweight-charts)は、開くときに読み込む(保有銘柄の画面の最初の読み込みを軽くするため)
+const SoldChartDialog = lazy(() => import("../components/SoldChartDialog"));
+
+type Dialog =
+  | { kind: "register" }
+  | { kind: "edit"; target: LotTarget }
+  | { kind: "sell"; target: LotTarget }
+  | { kind: "chart"; sold: SoldRow };
 
 /** 売却年のコンボボックスの「全て」の値(API の sold_year=all) */
 const SOLD_YEAR_ALL = "all";
@@ -194,7 +202,7 @@ function HoldingTable({
   );
 }
 
-function SoldTable({ data }: { data: HoldingsResponse }) {
+function SoldTable({ data, onChart }: { data: HoldingsResponse; onChart: (sold: SoldRow) => void }) {
   return (
     <div className="wrap">
       <table>
@@ -215,13 +223,14 @@ function SoldTable({ data }: { data: HoldingsResponse }) {
             <th>損益(円)</th>
             <th>保有した日数</th>
             <th>メモ</th>
+            <th>操作</th>
             <th>現在値</th>
           </tr>
         </thead>
         <tbody>
           {data.sold.length === 0 && (
             <tr>
-              <td colSpan={16} className="c">
+              <td colSpan={17} className="c">
                 売却済みの銘柄はありません
               </td>
             </tr>
@@ -246,6 +255,16 @@ function SoldTable({ data }: { data: HoldingsResponse }) {
               <td className="n">{s.held_days}日</td>
               <td>
                 <MemoText note={s.note} />
+              </td>
+              <td className="c">
+                <button
+                  type="button"
+                  className="btn sm sub"
+                  aria-label={`${s.name}(${s.buy_date}〜${s.sell_date})のチャート`}
+                  onClick={() => onChart(s)}
+                >
+                  チャート
+                </button>
               </td>
               <td className="n">{formatPrice(s.current)}</td>
             </tr>
@@ -373,13 +392,18 @@ export default function HoldingsPage() {
             </div>
           </div>
           <p className="rowcount">表示 {formatInteger(data.sold_shown_count)}件</p>
-          <SoldTable data={data} />
+          <SoldTable data={data} onChart={(sold) => setDialog({ kind: "chart", sold })} />
           <p className="info">損益は売値で計算する(損益(円)=(売値 − 買値)× 売り株数)。現在値は、売った後の値動きを見るために出す</p>
         </>
       )}
       {dialog?.kind === "register" && <RegisterDialog onClose={() => setDialog(null)} onSaved={saved} />}
       {dialog?.kind === "edit" && <EditDialog target={dialog.target} onClose={() => setDialog(null)} onSaved={saved} />}
       {dialog?.kind === "sell" && <SellDialog target={dialog.target} onClose={() => setDialog(null)} onSaved={saved} />}
+      {dialog?.kind === "chart" && (
+        <Suspense fallback={null}>
+          <SoldChartDialog sold={dialog.sold} onClose={() => setDialog(null)} />
+        </Suspense>
+      )}
     </>
   );
 }

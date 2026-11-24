@@ -138,6 +138,16 @@ describe("銘柄詳細", () => {
     expect(screen.getByText("株価は株式分割を調整した値。マウス(スマホは指で押した所)の日の値を表示")).toBeInTheDocument();
   });
 
+  it("表示の切り替えの初期値は、移動平均とトレンドラインだけ ON(売買の線のチェックは出さない)", async () => {
+    renderAt("/stocks/11110", handler());
+    await screen.findByTestId("price-chart");
+    expect(screen.getByRole("checkbox", { name: "移動平均" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "トレンドライン" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "ボリンジャーバンド" })).not.toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: "売買の線" })).toBeNull();
+    expect(screen.queryByText(/売買の線/)).toBeNull();
+  });
+
   it("表示の切り替えで線を出す・隠す。期間を変えると、その期間で読み直す", async () => {
     const user = userEvent.setup();
     const calls = renderAt("/stocks/11110", handler());

@@ -58,6 +58,10 @@ CANDIDATES_DEFAULT_DAYS: Final[int] = 5
 CANDIDATES_RANGE_MAX_MONTHS: Final[int] = 1
 # 銘柄詳細: チャートの期間の初期値(1M・3M・6M・1Y・ALL のどれか)
 CHART_DEFAULT_PERIOD: Final[str] = "6M"
+# チャートを日付の範囲(start・end)で指定したときの、返り値の period の値(保有銘柄の売却済みのチャート)
+CHART_RANGE_PERIOD: Final[str] = "RANGE"
+# チャートを日付の範囲で指定したときの、前後の余白の初期値(営業日数。株価の行で数える)
+CHART_RANGE_MARGIN_DAYS: Final[int] = 10
 # 的中率: 推移のグラフの期間の初期値(直近の月数)
 ACCURACY_DAILY_DEFAULT_MONTHS: Final[int] = 3
 # 的中率: 買い候補 順位別 的中率

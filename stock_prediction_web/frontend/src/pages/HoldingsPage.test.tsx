@@ -2,9 +2,13 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
-import { HOLDINGS } from "../test/apiData";
+import type { PricesResponse } from "../api/types";
+import { HOLDINGS, PRICES } from "../test/apiData";
+import { chartState, resetChart } from "../test/chartMock";
 import type { FakeResponse } from "../test/fixtures";
 import { renderApp, urlsOf } from "../test/renderApp";
+
+vi.mock("lightweight-charts", async () => (await import("../test/chartMock")).createChartMock());
 
 const STOCKS = [
   { code: "11340", name: "サンプル工業B", market: "プライム", sector33: "機械" },
@@ -18,6 +22,7 @@ function handler(send: Send = () => undefined) {
   return (p: string, q: URLSearchParams, method: string, body: unknown) => {
     if (method !== "GET") return send(method, p, body);
     if (p === "/api/holdings") return { body: HOLDINGS };
+    if (p === "/api/stocks/11300/prices") return { body: SOLD_PRICES };
     if (p === "/api/stocks/search") {
       const text = (q.get("q") ?? "").toUpperCase();
       return { body: { items: STOCKS.filter((s) => s.code.startsWith(text)) } };
@@ -25,6 +30,21 @@ function handler(send: Send = () => undefined) {
     return undefined;
   };
 }
+
+/** 売却済みのチャートの値(購入日 2026-04-14 〜 売却日 2026-06-12 の前後。購入日の前に 1:2 の株式分割があった形) */
+const blank = { ma5: 1, ma25: 1, ma75: 1, bb_mid: null, bb_up1: null, bb_up2: null, bb_dn1: null, bb_dn2: null };
+const SOLD_PRICES: PricesResponse = {
+  ...PRICES,
+  code: "11300",
+  period: "RANGE",
+  trendlines: [],
+  rows: [
+    { date: "2026-04-13", open: 750, high: 760, low: 740, close: 755, volume: 1000, multiplier: 0.5, ...blank },
+    { date: "2026-04-14", open: 760, high: 770, low: 750, close: 760, volume: 1000, multiplier: 0.5, ...blank },
+    { date: "2026-06-12", open: 1680, high: 1700, low: 1670, close: 1688, volume: 1000, multiplier: 1, ...blank },
+    { date: "2026-06-15", open: 1690, high: 1710, low: 1680, close: 1702, volume: 1000, multiplier: 1, ...blank },
+  ],
+};
 
 function dialog() {
   return within(screen.getByRole("dialog"));
@@ -44,7 +64,7 @@ describe("保有銘柄", () => {
     expect(screen.getByText("996,750")).toBeInTheDocument();
     expect(screen.getByText("-93,850(-9.4%)")).toHaveClass("dn");
     expect(screen.getByText("2回に分けて購入")).toBeInTheDocument();
-    expect(screen.getByText("売却(下降予測、市場の中央値も下回る予測)")).toHaveClass("jr");
+    expect(screen.getByText("売却(下降予測、市場の中央値も下回る予測)")).toHaveClass("jb");
     expect(screen.getByText("短期ゴールデンクロス発生")).toBeInTheDocument();
     expect(screen.queryByText("└ 1回目の購入")).toBeNull();
     await user.click(screen.getByRole("button", { name: "サンプル工業Bの購入ごとの行を開く" }));
@@ -181,6 +201,7 @@ describe("保有銘柄", () => {
     const user = userEvent.setup();
     renderApp("/holdings", (p) => {
       if (p === "/api/holdings") return { body: HOLDINGS };
+    if (p === "/api/stocks/11300/prices") return { body: SOLD_PRICES };
       return { status: 503, body: { detail: "DB に接続できません" } };
     });
     await user.click(await screen.findByRole("button", { name: "＋ 銘柄を登録" }));
@@ -370,6 +391,7 @@ describe("保有銘柄", () => {
       "損益(円)",
       "保有した日数",
       "メモ",
+      "操作",
       "現在値",
     ]);
     const cells = Array.from(screen.getByText("サンプル物産B").closest("tr")!.querySelectorAll("td")).map(
@@ -377,8 +399,8 @@ describe("保有銘柄", () => {
     );
     expect(cells[5]).toBe("152,000");
     expect(cells[9]).toBe("168,800");
-    // 保有した日数、メモ(なければ空)、現在値(一番右)
-    expect(cells.slice(13)).toEqual(["59日", "", "1,702.0"]);
+    // 保有した日数、メモ(なければ空)、操作(チャートのボタン)、現在値(一番右)
+    expect(cells.slice(13)).toEqual(["59日", "", "チャート", "1,702.0"]);
     // 現在の金額の列は出さない
     expect(heads).not.toContain("現在の金額");
   });
@@ -521,14 +543,14 @@ describe("保有銘柄", () => {
     ]);
   });
 
-  it("判定と備考の色のクラス(売却は赤、注意・乗り換えは橙、判定なしは緑、「MM/DD の終値」は橙、流動性注意は緑)", async () => {
+  it("判定と備考の色のクラス(売却は青で太字、注意・乗り換えは橙、判定なしは緑、「MM/DD の終値」は橙、流動性注意は緑)", async () => {
     const [first, second] = HOLDINGS.groups;
     const judgments = [
       ["保持", ""],
       ["保持(注意: 上昇予測だが下降しています)", "jo"],
       ["保持(注意: 相場全体が下がる予測)", "jo"],
       ["乗り換えを検討(上昇予測だが市場の中央値を下回る予測)", "jo"],
-      ["売却(下降予測、市場の中央値も下回る予測)", "jr"],
+      ["売却(下降予測、市場の中央値も下回る予測)", "jb"],
       ["判定なし(本日の予測がありません)", "jg"],
     ] as const;
     const groups = judgments.map(([judgment], i) => ({
@@ -553,5 +575,97 @@ describe("保有銘柄", () => {
     }
     expect(screen.getByText("11/05 の終値")).toHaveClass("o");
     expect(screen.getByText("流動性注意")).toHaveClass("g");
+  });
+
+  it("売却済みの行の「チャート」で、購入日〜売却日のチャートをダイアログで出す(画面は移らない)", async () => {
+    resetChart();
+    window.localStorage.clear();
+    const user = userEvent.setup();
+    const calls = renderApp("/holdings", handler());
+    // 保有中のタブには「チャート」のボタンを出さない
+    await screen.findByText("判定の日: 2026-07-22(水)");
+    expect(screen.queryByRole("button", { name: /のチャート$/ })).toBeNull();
+    await user.click(screen.getByRole("tab", { name: "売却済み(1)" }));
+    expect(screen.getByRole("columnheader", { name: "操作" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "サンプル物産B(2026-04-14〜2026-06-12)のチャート" }));
+    const d = within(await screen.findByRole("dialog", { name: "1130 サンプル物産B" }));
+    // 画面は移らない(保有銘柄の画面の上に出す)
+    expect(screen.getByRole("heading", { level: 1, name: "保有銘柄" })).toBeInTheDocument();
+    // 見出し
+    expect(d.getByText("買値 1,520.0 → 売値 1,688.0")).toBeInTheDocument();
+    expect(d.getByTestId("sold-chart-pnl")).toHaveTextContent("+11.1%(+16,800円)");
+    expect(d.getByTestId("sold-chart-pnl")).toHaveClass("up");
+    expect(d.getByText("保有した日数 59日")).toBeInTheDocument();
+    expect(d.getByText("2026-04-14 〜 2026-06-12")).toBeInTheDocument();
+    expect(d.getByText("グレーの背景は持っていなかった期間")).toBeInTheDocument();
+    expect(d.getByText("売買の線(上がり赤・下がり青)")).toBeInTheDocument();
+    // 期間のタブ(初めは保有期間)。1か月〜全期間のタブは出さない
+    expect(d.getByRole("tab", { name: "保有期間" })).toHaveAttribute("aria-selected", "true");
+    expect(d.queryByRole("tab", { name: "6か月" })).toBeNull();
+    await waitFor(() =>
+      expect(urlsOf(calls, "/api/stocks/11300/prices").at(-1)).toBe("/api/stocks/11300/prices?start=2026-04-14&end=2026-06-12"),
+    );
+    // 表示の切り替え: 売買の線は ON、移動平均・トレンドライン・ボリンジャーバンドは OFF(銘柄詳細とは違う)。売買の線が一番前
+    expect(await d.findByTestId("price-chart")).toBeInTheDocument();
+    expect(Array.from(document.querySelectorAll(".checks .check")).map((e) => e.textContent)).toEqual([
+      "売買の線",
+      "移動平均",
+      "トレンドライン",
+      "ボリンジャーバンド",
+    ]);
+    expect(d.getByRole("checkbox", { name: "売買の線" })).toBeChecked();
+    expect(d.getByRole("checkbox", { name: "移動平均" })).not.toBeChecked();
+    expect(d.getByRole("checkbox", { name: "トレンドライン" })).not.toBeChecked();
+    expect(d.getByRole("checkbox", { name: "ボリンジャーバンド" })).not.toBeChecked();
+    // 買・売の印、買値・売値の線(株式分割を調整した値)、グレーの背景(ローソク足と出来高の段)
+    const candle = chartState.series.find((x) => x.kind === "Candlestick")!;
+    const volume = chartState.series.find((x) => x.kind === "Histogram")!;
+    const marks = chartState.markers.find((m) => m.series === candle)!.markers;
+    expect(marks.map((m) => [m.time, m.text, m.shape, m.position])).toEqual([
+      ["2026-04-14", "買", "arrowUp", "belowBar"],
+      ["2026-06-12", "売", "arrowDown", "aboveBar"],
+    ]);
+    expect(candle.priceLines.map((l) => [l.title, l.price, l.lineStyle, l.lineVisible])).toEqual([
+      ["買値", 760, 2, true],
+      ["売値", 1688, 2, true],
+    ]);
+    expect(candle.primitives).toHaveLength(1);
+    expect(volume.primitives).toHaveLength(1);
+    // 売買の線: 購入日の買値から売却日の売値までの2点。売値 > 買値なので赤(上がりの色)、実線、太さ2
+    const trade = () => chartState.series.filter((x) => x.kind === "Line" && x.options.lineWidth === 2);
+    expect(trade()).toHaveLength(1);
+    expect(trade()[0]!.data).toEqual([
+      { time: "2026-04-14", value: 760 },
+      { time: "2026-06-12", value: 1688 },
+    ]);
+    expect(trade()[0]!.options).toMatchObject({ color: "#c00000", lineStyle: 0, visible: true });
+    // チェックを外すと、売買の線と水平線が消え、買・売の印は残る
+    await user.click(d.getByRole("checkbox", { name: "売買の線" }));
+    expect(trade()[0]!.options.visible).toBe(false);
+    expect(candle.priceLines.map((l) => l.lineVisible)).toEqual([false, false]);
+    expect(candle.priceLines.map((l) => l.axisLabelVisible)).toEqual([false, false]);
+    expect(chartState.markers.find((m) => m.series === candle)!.markers).toHaveLength(2);
+    expect(d.queryByText("売買の線(上がり赤・下がり青)")).toBeNull();
+    await user.click(d.getByRole("checkbox", { name: "売買の線" }));
+    expect(trade()[0]!.options.visible).toBe(true);
+    expect(candle.priceLines.map((l) => [l.title, l.lineVisible])).toEqual([
+      ["買値", true],
+      ["売値", true],
+    ]);
+    // 購入後〜今日まで: end を渡さない
+    await user.click(d.getByRole("tab", { name: "購入後〜今日まで" }));
+    expect(d.queryByRole("tab", { name: "売却後〜今日まで" })).toBeNull();
+    await waitFor(() => expect(urlsOf(calls, "/api/stocks/11300/prices").at(-1)).toBe("/api/stocks/11300/prices?start=2026-04-14"));
+    // 高さは銘柄詳細とは別の名前で残す
+    await user.click(d.getByRole("tab", { name: "大" }));
+    expect(window.localStorage.getItem("soldChartHeight")).toBe("L");
+    expect(window.localStorage.getItem("stockChartHeight")).toBeNull();
+    // 閉じる
+    await user.click(d.getByRole("button", { name: "閉じる" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "サンプル物産B(2026-04-14〜2026-06-12)のチャート" }));
+    await screen.findByRole("dialog");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
